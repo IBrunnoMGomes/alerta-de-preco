@@ -1,5 +1,7 @@
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
 import AddProductForm from '@/components/product/AddProductForm';
 import ProductCard from '@/components/product/ProductCard';
@@ -14,7 +16,8 @@ import {
   Flame, 
   LineChart, 
   ShoppingBag, 
-  TrendingDown 
+  TrendingDown,
+  LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { 
@@ -25,126 +28,137 @@ import {
 } from '@/components/ui/dialog';
 import PriceHistoryChart from '@/components/product/PriceHistoryChart';
 import { Product } from '@/types/product';
-import { generateId } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
+import { calculatePriceChange } from '@/lib/utils';
 
-// Dados de exemplo para simular o backend
-const MOCK_PRODUCTS: Product[] = [
-  {
-    id: '1',
-    name: 'Samsung Galaxy S23 Ultra 256GB',
-    url: 'https://exemplo.com/produto-1',
-    store: 'Mercado Livre',
-    currentPrice: 5999.99,
-    previousPrice: 6499.99,
-    priceChange: -7.7,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: true,
-    lastUpdated: new Date().toISOString(),
-    priceTarget: 5500,
-    priceHistory: [
-      { date: new Date(Date.now() - 30 * 864000000).toISOString(), price: 6799.99 },
-      { date: new Date(Date.now() - 25 * 864000000).toISOString(), price: 6799.99 },
-      { date: new Date(Date.now() - 20 * 864000000).toISOString(), price: 6699.99 },
-      { date: new Date(Date.now() - 15 * 864000000).toISOString(), price: 6499.99 },
-      { date: new Date(Date.now() - 10 * 864000000).toISOString(), price: 6499.99 },
-      { date: new Date(Date.now() - 5 * 864000000).toISOString(), price: 6299.99 },
-      { date: new Date().toISOString(), price: 5999.99 }
-    ]
-  },
-  {
-    id: '2',
-    name: 'PlayStation 5 Slim Digital Edition',
-    url: 'https://exemplo.com/produto-2',
-    store: 'Amazon',
-    currentPrice: 3799.90,
-    previousPrice: 3999.90,
-    priceChange: -5.0,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: true,
-    lastUpdated: new Date(Date.now() - 2 * 864000000).toISOString(),
-    priceTarget: 3500,
-    priceHistory: [
-      { date: new Date(Date.now() - 30 * 864000000).toISOString(), price: 4299.90 },
-      { date: new Date(Date.now() - 20 * 864000000).toISOString(), price: 4199.90 },
-      { date: new Date(Date.now() - 10 * 864000000).toISOString(), price: 3999.90 },
-      { date: new Date(Date.now() - 2 * 864000000).toISOString(), price: 3799.90 }
-    ]
-  },
-  {
-    id: '3',
-    name: 'Apple MacBook Air M2 (2023) 8GB RAM 256GB SSD',
-    url: 'https://exemplo.com/produto-3',
-    store: 'Magazine Luiza',
-    currentPrice: 7999.00,
-    previousPrice: 7999.00,
-    priceChange: 0,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: false,
-    lastUpdated: new Date(Date.now() - 1 * 864000000).toISOString(),
-    priceTarget: 7000,
-    priceHistory: [
-      { date: new Date(Date.now() - 20 * 864000000).toISOString(), price: 8499.00 },
-      { date: new Date(Date.now() - 15 * 864000000).toISOString(), price: 8499.00 },
-      { date: new Date(Date.now() - 10 * 864000000).toISOString(), price: 8299.00 },
-      { date: new Date(Date.now() - 5 * 864000000).toISOString(), price: 7999.00 },
-      { date: new Date(Date.now() - 1 * 864000000).toISOString(), price: 7999.00 }
-    ]
-  },
-  {
-    id: '4',
-    name: 'Smart TV LG OLED 55" 4K UHD',
-    url: 'https://exemplo.com/produto-4',
-    store: 'Shopee',
-    currentPrice: 4559.10,
-    previousPrice: 5199.00,
-    priceChange: -12.3,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: true,
-    lastUpdated: new Date().toISOString(),
-    priceTarget: 4500,
-    priceHistory: [
-      { date: new Date(Date.now() - 30 * 864000000).toISOString(), price: 5899.00 },
-      { date: new Date(Date.now() - 20 * 864000000).toISOString(), price: 5599.00 },
-      { date: new Date(Date.now() - 10 * 864000000).toISOString(), price: 5199.00 },
-      { date: new Date().toISOString(), price: 4559.10 }
-    ]
-  }
-];
+const fetchProducts = async () => {
+  const { data, error } = await supabase
+    .from('products')
+    .select(`
+      id, 
+      name, 
+      url, 
+      store, 
+      current_price, 
+      previous_price, 
+      image_url, 
+      is_on_sale, 
+      price_target, 
+      last_checked,
+      price_history(id, price, checked_at)
+    `);
+  
+  if (error) throw error;
+  
+  return data.map((item: any) => {
+    // Converter para o formato esperado pelo componente Product
+    const product: Product = {
+      id: item.id,
+      name: item.name,
+      url: item.url,
+      store: item.store,
+      currentPrice: item.current_price,
+      previousPrice: item.previous_price,
+      imageUrl: item.image_url || 'https://via.placeholder.com/300',
+      isOnSale: item.is_on_sale || false,
+      lastUpdated: item.last_checked,
+      priceTarget: item.price_target,
+      priceChange: calculatePriceChange(item.current_price, item.previous_price),
+      priceHistory: item.price_history.map((history: any) => ({
+        date: history.checked_at,
+        price: history.price
+      }))
+    };
+    
+    return product;
+  });
+};
 
 const Dashboard = () => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Simulação de carregamento de dados
-    const loadData = async () => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setProducts(MOCK_PRODUCTS);
-      setIsLoading(false);
-    };
+  const { data: products = [], isLoading, isError, refetch } = useQuery({
+    queryKey: ['products'],
+    queryFn: fetchProducts
+  });
 
-    loadData();
-  }, []);
-
-  const handleAddProduct = (newProduct: Omit<Product, 'id'>) => {
-    const productWithId = {
-      ...newProduct,
-      id: generateId()
-    };
-    
-    setProducts([productWithId, ...products]);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast({
+      title: "Logout realizado",
+      description: "Você saiu da sua conta com sucesso.",
+    });
   };
 
-  const handleDeleteProduct = (id: string) => {
-    setProducts(products.filter(product => product.id !== id));
-    toast({
-      title: "Produto removido",
-      description: "O produto foi removido da sua lista de monitoramento.",
-    });
+  const handleAddProduct = async (newProduct: Omit<Product, 'id'>) => {
+    try {
+      // Inserir o produto no banco de dados
+      const { data, error } = await supabase
+        .from('products')
+        .insert({
+          name: newProduct.name,
+          url: newProduct.url,
+          store: newProduct.store,
+          current_price: newProduct.currentPrice,
+          previous_price: newProduct.previousPrice,
+          image_url: newProduct.imageUrl,
+          is_on_sale: newProduct.isOnSale,
+          price_target: newProduct.priceTarget
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Adicionar o histórico de preço inicial
+      await supabase
+        .from('price_history')
+        .insert({
+          product_id: data.id,
+          price: newProduct.currentPrice
+        });
+      
+      // Recarregar a lista de produtos
+      refetch();
+      
+      toast({
+        title: "Produto adicionado",
+        description: "O produto foi adicionado à sua lista de monitoramento.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao adicionar produto",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      // Recarregar a lista de produtos
+      refetch();
+      
+      toast({
+        title: "Produto removido",
+        description: "O produto foi removido da sua lista de monitoramento.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao remover produto",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleViewDetails = (id: string) => {
@@ -152,6 +166,34 @@ const Dashboard = () => {
     if (product) {
       setSelectedProduct(product);
       setShowHistoryDialog(true);
+    }
+  };
+
+  const handleUpdateProduct = async (id: string, updates: Partial<Product>) => {
+    try {
+      // Converter do formato do componente para o formato do banco
+      const dbUpdates: any = {};
+      
+      if (updates.currentPrice !== undefined) dbUpdates.current_price = updates.currentPrice;
+      if (updates.previousPrice !== undefined) dbUpdates.previous_price = updates.previousPrice;
+      if (updates.priceTarget !== undefined) dbUpdates.price_target = updates.priceTarget;
+      if (updates.isOnSale !== undefined) dbUpdates.is_on_sale = updates.isOnSale;
+      
+      const { error } = await supabase
+        .from('products')
+        .update(dbUpdates)
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      // Recarregar a lista de produtos
+      refetch();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar produto",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -169,6 +211,10 @@ const Dashboard = () => {
     return Math.abs(product.priceChange);
   };
 
+  const getTargetCount = () => {
+    return products.filter(p => p.priceTarget !== null && p.currentPrice <= (p.priceTarget || 0)).length;
+  };
+
   return (
     <MainLayout>
       <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -178,7 +224,13 @@ const Dashboard = () => {
             Acompanhe os preços dos seus produtos favoritos
           </p>
         </div>
-        <AddProductForm onAddProduct={handleAddProduct} />
+        <div className="flex gap-2">
+          <AddProductForm onAddProduct={handleAddProduct} />
+          <Button variant="outline" onClick={handleLogout}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Sair
+          </Button>
+        </div>
       </div>
 
       {/* Cards de estatísticas */}
@@ -222,8 +274,8 @@ const Dashboard = () => {
         <Card>
           <CardContent className="p-6 flex justify-between items-center">
             <div>
-              <p className="text-sm text-gray-500">Próximas a Meta</p>
-              <p className="text-2xl font-bold">2</p>
+              <p className="text-sm text-gray-500">Metas Alcançadas</p>
+              <p className="text-2xl font-bold">{getTargetCount()}</p>
             </div>
             <div className="h-12 w-12 rounded-full bg-yellow-100 flex items-center justify-center">
               <AlertTriangle className="h-6 w-6 text-yellow-500" />
@@ -266,6 +318,7 @@ const Dashboard = () => {
                   product={product}
                   onDelete={handleDeleteProduct}
                   onViewDetails={handleViewDetails}
+                  onUpdateProduct={handleUpdateProduct}
                 />
               ))}
             </div>

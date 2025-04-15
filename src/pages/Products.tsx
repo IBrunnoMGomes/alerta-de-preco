@@ -1,10 +1,12 @@
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
 import ProductCard from '@/components/product/ProductCard';
 import AddProductForm from '@/components/product/AddProductForm';
 import { Product } from '@/types/product';
-import { generateId } from '@/lib/utils';
+import { calculatePriceChange } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
 import { 
@@ -24,141 +26,51 @@ import { Button } from '@/components/ui/button';
 import PriceHistoryChart from '@/components/product/PriceHistoryChart';
 import { Search, Filter } from 'lucide-react';
 
-// Importando os dados de exemplo do Dashboard
-// Em uma implementação real, esses dados viriam de uma API ou banco de dados
-const MOCK_PRODUCTS: Product[] = [
-  {
-    id: '1',
-    name: 'Samsung Galaxy S23 Ultra 256GB',
-    url: 'https://exemplo.com/produto-1',
-    store: 'Mercado Livre',
-    currentPrice: 5999.99,
-    previousPrice: 6499.99,
-    priceChange: -7.7,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: true,
-    lastUpdated: new Date().toISOString(),
-    priceTarget: 5500,
-    priceHistory: [
-      { date: new Date(Date.now() - 30 * 864000000).toISOString(), price: 6799.99 },
-      { date: new Date(Date.now() - 25 * 864000000).toISOString(), price: 6799.99 },
-      { date: new Date(Date.now() - 20 * 864000000).toISOString(), price: 6699.99 },
-      { date: new Date(Date.now() - 15 * 864000000).toISOString(), price: 6499.99 },
-      { date: new Date(Date.now() - 10 * 864000000).toISOString(), price: 6499.99 },
-      { date: new Date(Date.now() - 5 * 864000000).toISOString(), price: 6299.99 },
-      { date: new Date().toISOString(), price: 5999.99 }
-    ]
-  },
-  {
-    id: '2',
-    name: 'PlayStation 5 Slim Digital Edition',
-    url: 'https://exemplo.com/produto-2',
-    store: 'Amazon',
-    currentPrice: 3799.90,
-    previousPrice: 3999.90,
-    priceChange: -5.0,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: true,
-    lastUpdated: new Date(Date.now() - 2 * 864000000).toISOString(),
-    priceTarget: 3500,
-    priceHistory: [
-      { date: new Date(Date.now() - 30 * 864000000).toISOString(), price: 4299.90 },
-      { date: new Date(Date.now() - 20 * 864000000).toISOString(), price: 4199.90 },
-      { date: new Date(Date.now() - 10 * 864000000).toISOString(), price: 3999.90 },
-      { date: new Date(Date.now() - 2 * 864000000).toISOString(), price: 3799.90 }
-    ]
-  },
-  {
-    id: '3',
-    name: 'Apple MacBook Air M2 (2023) 8GB RAM 256GB SSD',
-    url: 'https://exemplo.com/produto-3',
-    store: 'Magazine Luiza',
-    currentPrice: 7999.00,
-    previousPrice: 7999.00,
-    priceChange: 0,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: false,
-    lastUpdated: new Date(Date.now() - 1 * 864000000).toISOString(),
-    priceTarget: 7000,
-    priceHistory: [
-      { date: new Date(Date.now() - 20 * 864000000).toISOString(), price: 8499.00 },
-      { date: new Date(Date.now() - 15 * 864000000).toISOString(), price: 8499.00 },
-      { date: new Date(Date.now() - 10 * 864000000).toISOString(), price: 8299.00 },
-      { date: new Date(Date.now() - 5 * 864000000).toISOString(), price: 7999.00 },
-      { date: new Date(Date.now() - 1 * 864000000).toISOString(), price: 7999.00 }
-    ]
-  },
-  {
-    id: '4',
-    name: 'Smart TV LG OLED 55" 4K UHD',
-    url: 'https://exemplo.com/produto-4',
-    store: 'Shopee',
-    currentPrice: 4559.10,
-    previousPrice: 5199.00,
-    priceChange: -12.3,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: true,
-    lastUpdated: new Date().toISOString(),
-    priceTarget: 4500,
-    priceHistory: [
-      { date: new Date(Date.now() - 30 * 864000000).toISOString(), price: 5899.00 },
-      { date: new Date(Date.now() - 20 * 864000000).toISOString(), price: 5599.00 },
-      { date: new Date(Date.now() - 10 * 864000000).toISOString(), price: 5199.00 },
-      { date: new Date().toISOString(), price: 4559.10 }
-    ]
-  },
-  {
-    id: '5',
-    name: 'Headphone Sony WH-1000XM5',
-    url: 'https://exemplo.com/produto-5',
-    store: 'Amazon',
-    currentPrice: 2399.00,
-    previousPrice: 2699.00,
-    priceChange: -11.1,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: true,
-    lastUpdated: new Date(Date.now() - 3 * 864000000).toISOString(),
-    priceTarget: 2200,
-    priceHistory: [
-      { date: new Date(Date.now() - 25 * 864000000).toISOString(), price: 2799.00 },
-      { date: new Date(Date.now() - 15 * 864000000).toISOString(), price: 2699.00 },
-      { date: new Date(Date.now() - 3 * 864000000).toISOString(), price: 2399.00 }
-    ]
-  },
-  {
-    id: '6',
-    name: 'Apple iPad Air 5ª Geração 64GB Wi-Fi',
-    url: 'https://exemplo.com/produto-6',
-    store: 'Mercado Livre',
-    currentPrice: 4999.00,
-    previousPrice: 5299.00,
-    priceChange: -5.7,
-    imageUrl: 'https://via.placeholder.com/300',
-    isOnSale: true,
-    lastUpdated: new Date(Date.now() - 1 * 864000000).toISOString(),
-    priceTarget: 4500,
-    priceHistory: [
-      { date: new Date(Date.now() - 30 * 864000000).toISOString(), price: 5499.00 },
-      { date: new Date(Date.now() - 20 * 864000000).toISOString(), price: 5299.00 },
-      { date: new Date(Date.now() - 1 * 864000000).toISOString(), price: 4999.00 }
-    ]
-  }
-];
-
-const stores = ['Todos', 'Mercado Livre', 'Amazon', 'Magazine Luiza', 'Shopee', 'AliExpress', 'eBay'];
-const sortOptions = [
-  { value: 'name-asc', label: 'Nome (A-Z)' },
-  { value: 'name-desc', label: 'Nome (Z-A)' },
-  { value: 'price-asc', label: 'Preço (menor-maior)' },
-  { value: 'price-desc', label: 'Preço (maior-menor)' },
-  { value: 'discount', label: 'Maior desconto' },
-  { value: 'date', label: 'Recém adicionados' },
-];
+const fetchProducts = async () => {
+  const { data, error } = await supabase
+    .from('products')
+    .select(`
+      id, 
+      name, 
+      url, 
+      store, 
+      current_price, 
+      previous_price, 
+      image_url, 
+      is_on_sale, 
+      price_target, 
+      last_checked,
+      price_history(id, price, checked_at)
+    `);
+  
+  if (error) throw error;
+  
+  return data.map((item: any) => {
+    // Converter para o formato esperado pelo componente Product
+    const product: Product = {
+      id: item.id,
+      name: item.name,
+      url: item.url,
+      store: item.store,
+      currentPrice: item.current_price,
+      previousPrice: item.previous_price,
+      imageUrl: item.image_url || 'https://via.placeholder.com/300',
+      isOnSale: item.is_on_sale || false,
+      lastUpdated: item.last_checked,
+      priceTarget: item.price_target,
+      priceChange: calculatePriceChange(item.current_price, item.previous_price),
+      priceHistory: item.price_history.map((history: any) => ({
+        date: history.checked_at,
+        price: history.price
+      }))
+    };
+    
+    return product;
+  });
+};
 
 const Products = () => {
-  const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStore, setSelectedStore] = useState('Todos');
   const [sortBy, setSortBy] = useState('date');
@@ -167,17 +79,22 @@ const Products = () => {
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Simulação de carregamento de dados
-    const loadData = async () => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setProducts(MOCK_PRODUCTS);
-      setFilteredProducts(MOCK_PRODUCTS);
-      setIsLoading(false);
-    };
+  const { data: products = [], isLoading, isError, refetch } = useQuery({
+    queryKey: ['products'],
+    queryFn: fetchProducts
+  });
 
-    loadData();
-  }, []);
+  // Extrair lojas únicas dos produtos
+  const stores = ['Todos', ...Array.from(new Set(products.map(p => p.store)))];
+  
+  const sortOptions = [
+    { value: 'name-asc', label: 'Nome (A-Z)' },
+    { value: 'name-desc', label: 'Nome (Z-A)' },
+    { value: 'price-asc', label: 'Preço (menor-maior)' },
+    { value: 'price-desc', label: 'Preço (maior-menor)' },
+    { value: 'discount', label: 'Maior desconto' },
+    { value: 'date', label: 'Recém adicionados' },
+  ];
 
   useEffect(() => {
     // Filtrar e ordenar produtos
@@ -228,25 +145,73 @@ const Products = () => {
     setFilteredProducts(result);
   }, [products, searchTerm, selectedStore, sortBy, showOnSaleOnly]);
 
-  const handleAddProduct = (newProduct: Omit<Product, 'id'>) => {
-    const productWithId = {
-      ...newProduct,
-      id: generateId()
-    };
-    
-    setProducts([productWithId, ...products]);
-    toast({
-      title: "Produto adicionado",
-      description: "O produto foi adicionado à sua lista de monitoramento.",
-    });
+  const handleAddProduct = async (newProduct: Omit<Product, 'id'>) => {
+    try {
+      // Inserir o produto no banco de dados
+      const { data, error } = await supabase
+        .from('products')
+        .insert({
+          name: newProduct.name,
+          url: newProduct.url,
+          store: newProduct.store,
+          current_price: newProduct.currentPrice,
+          previous_price: newProduct.previousPrice,
+          image_url: newProduct.imageUrl,
+          is_on_sale: newProduct.isOnSale,
+          price_target: newProduct.priceTarget
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Adicionar o histórico de preço inicial
+      await supabase
+        .from('price_history')
+        .insert({
+          product_id: data.id,
+          price: newProduct.currentPrice
+        });
+      
+      // Recarregar a lista de produtos
+      refetch();
+      
+      toast({
+        title: "Produto adicionado",
+        description: "O produto foi adicionado à sua lista de monitoramento.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao adicionar produto",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteProduct = (id: string) => {
-    setProducts(products.filter(product => product.id !== id));
-    toast({
-      title: "Produto removido",
-      description: "O produto foi removido da sua lista de monitoramento.",
-    });
+  const handleDeleteProduct = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      // Recarregar a lista de produtos
+      refetch();
+      
+      toast({
+        title: "Produto removido",
+        description: "O produto foi removido da sua lista de monitoramento.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao remover produto",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleViewDetails = (id: string) => {
@@ -254,6 +219,34 @@ const Products = () => {
     if (product) {
       setSelectedProduct(product);
       setShowHistoryDialog(true);
+    }
+  };
+
+  const handleUpdateProduct = async (id: string, updates: Partial<Product>) => {
+    try {
+      // Converter do formato do componente para o formato do banco
+      const dbUpdates: any = {};
+      
+      if (updates.currentPrice !== undefined) dbUpdates.current_price = updates.currentPrice;
+      if (updates.previousPrice !== undefined) dbUpdates.previous_price = updates.previousPrice;
+      if (updates.priceTarget !== undefined) dbUpdates.price_target = updates.priceTarget;
+      if (updates.isOnSale !== undefined) dbUpdates.is_on_sale = updates.isOnSale;
+      
+      const { error } = await supabase
+        .from('products')
+        .update(dbUpdates)
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      // Recarregar a lista de produtos
+      refetch();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao atualizar produto",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -386,6 +379,7 @@ const Products = () => {
                   product={product}
                   onDelete={handleDeleteProduct}
                   onViewDetails={handleViewDetails}
+                  onUpdateProduct={handleUpdateProduct}
                 />
               ))}
             </div>

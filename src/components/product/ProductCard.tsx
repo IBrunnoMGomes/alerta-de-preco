@@ -18,17 +18,26 @@ import {
   LineChart, 
   AlertTriangle 
 } from 'lucide-react';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle 
+} from '@/components/ui/dialog';
 import { Product } from '@/types/product';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, getDaysAgo } from '@/lib/utils';
+import PriceAlertForm from './PriceAlertForm';
 
 interface ProductCardProps {
   product: Product;
   onDelete: (id: string) => void;
   onViewDetails: (id: string) => void;
+  onUpdateProduct: (id: string, updates: Partial<Product>) => void;
 }
 
-const ProductCard = ({ product, onDelete, onViewDetails }: ProductCardProps) => {
+const ProductCard = ({ product, onDelete, onViewDetails, onUpdateProduct }: ProductCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [showAlertDialog, setShowAlertDialog] = useState(false);
 
   const getPriceChangeColor = () => {
     if (product.priceChange < 0) return 'text-price-decrease';
@@ -42,12 +51,12 @@ const ProductCard = ({ product, onDelete, onViewDetails }: ProductCardProps) => 
     return null;
   };
 
-  const getDaysAgo = (date: string) => {
-    const days = Math.floor((new Date().getTime() - new Date(date).getTime()) / (1000 * 3600 * 24));
-    if (days === 0) return 'Hoje';
-    if (days === 1) return 'Ontem';
-    return `${days} dias atrás`;
+  const handleAlertSet = (targetPrice: number) => {
+    onUpdateProduct(product.id, { priceTarget: targetPrice });
   };
+
+  const hasTargetPrice = product.priceTarget !== null;
+  const isTargetMet = hasTargetPrice && product.currentPrice <= (product.priceTarget || 0);
 
   return (
     <Card 
@@ -75,6 +84,17 @@ const ProductCard = ({ product, onDelete, onViewDetails }: ProductCardProps) => 
             </div>
           </div>
         </div>
+        
+        {hasTargetPrice && (
+          <div className="absolute top-2 right-2">
+            <Badge 
+              variant={isTargetMet ? "success" : "secondary"}
+              className={`${isTargetMet ? 'bg-green-500' : 'bg-gray-600'} text-white`}
+            >
+              Meta: {formatCurrency(product.priceTarget || 0)}
+            </Badge>
+          </div>
+        )}
       </div>
 
       <CardHeader className="pb-2">
@@ -128,6 +148,16 @@ const ProductCard = ({ product, onDelete, onViewDetails }: ProductCardProps) => 
             variant="outline" 
             size="sm" 
             className="text-xs"
+            onClick={() => setShowAlertDialog(true)}
+          >
+            <Bell className="h-3.5 w-3.5 mr-1" />
+            Alerta
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="text-xs"
             onClick={() => window.open(product.url, '_blank')}
           >
             <ExternalLink className="h-3.5 w-3.5 mr-1" />
@@ -144,6 +174,19 @@ const ProductCard = ({ product, onDelete, onViewDetails }: ProductCardProps) => 
           </Button>
         </div>
       </CardFooter>
+
+      <Dialog open={showAlertDialog} onOpenChange={setShowAlertDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Configurar alerta de preço</DialogTitle>
+          </DialogHeader>
+          <PriceAlertForm 
+            product={product}
+            onClose={() => setShowAlertDialog(false)}
+            onAlertSet={handleAlertSet}
+          />
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

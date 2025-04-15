@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,6 +62,19 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				// Cores personalizadas para o app de monitoramento de preços
+				price: {
+					decrease: '#10b981', // verde para preços baixos
+					increase: '#ef4444', // vermelho para preços altos
+					neutral: '#6b7280', // cinza para preços estáveis
+				},
+				brand: {
+					primary: '#0ea5e9',    // azul principal
+					secondary: '#14b8a6',  // verde-azulado secundário
+					accent: '#8b5cf6',     // roxo para destaque
+					light: '#e0f2fe',      // azul claro para backgrounds
+					dark: '#0c4a6e',       // azul escuro para textos
 				}
 			},
 			borderRadius: {
@@ -84,11 +98,16 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'pulse-subtle': {
+					'0%, 100%': { opacity: '1' },
+					'50%': { opacity: '0.7' }
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'pulse-subtle': 'pulse-subtle 2s ease-in-out infinite'
 			}
 		}
 	},

@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
   DialogFooter
 } from '@/components/ui/dialog';
@@ -23,6 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Product } from '@/types/product';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AddProductFormProps {
   onAddProduct: (product: Omit<Product, 'id'>) => void;
@@ -79,6 +81,18 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
 
     if (!validateUrl(url)) {
       setValidationError('URL inválido. Por favor, insira um URL completo começando com http:// ou https://.');
+      return;
+    }
+
+    // Verificar autenticação
+    const { data: { user } } = await supabase.auth.getUser();
+      
+    if (!user) {
+      toast({
+        title: "Erro de autenticação",
+        description: "Você precisa estar logado para adicionar produtos.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -146,6 +160,18 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
       return;
     }
 
+    // Verificar autenticação
+    const { data: { user } } = await supabase.auth.getUser();
+      
+    if (!user) {
+      toast({
+        title: "Erro de autenticação",
+        description: "Você precisa estar logado para adicionar produtos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsValidating(true);
     setValidationError('');
 
@@ -198,6 +224,9 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
       <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
           <DialogTitle className="text-xl">Adicionar Novo Produto</DialogTitle>
+          <DialogDescription>
+            Adicione um produto para começar a monitorar seu preço
+          </DialogDescription>
         </DialogHeader>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">

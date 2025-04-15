@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,7 +19,8 @@ import {
   Dialog, 
   DialogContent,
   DialogHeader,
-  DialogTitle 
+  DialogTitle,
+  DialogDescription
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import PriceHistoryChart from '@/components/product/PriceHistoryChart';
@@ -46,7 +46,6 @@ const fetchProducts = async () => {
   if (error) throw error;
   
   return data.map((item: any) => {
-    // Converter para o formato esperado pelo componente Product
     const product: Product = {
       id: item.id,
       name: item.name,
@@ -84,7 +83,6 @@ const Products = () => {
     queryFn: fetchProducts
   });
 
-  // Extrair lojas únicas dos produtos
   const stores = ['Todos', ...Array.from(new Set(products.map(p => p.store)))];
   
   const sortOptions = [
@@ -97,10 +95,8 @@ const Products = () => {
   ];
 
   useEffect(() => {
-    // Filtrar e ordenar produtos
     let result = [...products];
     
-    // Filtrar por termo de busca
     if (searchTerm) {
       result = result.filter(product => 
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -108,17 +104,14 @@ const Products = () => {
       );
     }
     
-    // Filtrar por loja
     if (selectedStore !== 'Todos') {
       result = result.filter(product => product.store === selectedStore);
     }
     
-    // Filtrar por produtos em promoção
     if (showOnSaleOnly) {
       result = result.filter(product => product.isOnSale);
     }
     
-    // Ordenar produtos
     switch (sortBy) {
       case 'name-asc':
         result.sort((a, b) => a.name.localeCompare(b.name));
@@ -147,7 +140,17 @@ const Products = () => {
 
   const handleAddProduct = async (newProduct: Omit<Product, 'id'>) => {
     try {
-      // Inserir o produto no banco de dados
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast({
+          title: "Erro de autenticação",
+          description: "Você precisa estar logado para adicionar produtos.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('products')
         .insert({
@@ -158,14 +161,14 @@ const Products = () => {
           previous_price: newProduct.previousPrice,
           image_url: newProduct.imageUrl,
           is_on_sale: newProduct.isOnSale,
-          price_target: newProduct.priceTarget
+          price_target: newProduct.priceTarget,
+          user_id: user.id
         })
         .select()
         .single();
       
       if (error) throw error;
       
-      // Adicionar o histórico de preço inicial
       await supabase
         .from('price_history')
         .insert({
@@ -173,7 +176,6 @@ const Products = () => {
           price: newProduct.currentPrice
         });
       
-      // Recarregar a lista de produtos
       refetch();
       
       toast({
@@ -198,7 +200,6 @@ const Products = () => {
       
       if (error) throw error;
       
-      // Recarregar a lista de produtos
       refetch();
       
       toast({
@@ -224,7 +225,6 @@ const Products = () => {
 
   const handleUpdateProduct = async (id: string, updates: Partial<Product>) => {
     try {
-      // Converter do formato do componente para o formato do banco
       const dbUpdates: any = {};
       
       if (updates.currentPrice !== undefined) dbUpdates.current_price = updates.currentPrice;
@@ -239,7 +239,6 @@ const Products = () => {
       
       if (error) throw error;
       
-      // Recarregar a lista de produtos
       refetch();
     } catch (error: any) {
       toast({
@@ -269,7 +268,6 @@ const Products = () => {
         <AddProductForm onAddProduct={handleAddProduct} />
       </div>
 
-      {/* Filtros e Busca */}
       <div className="bg-white p-4 rounded-lg border border-gray-200 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="col-span-1 md:col-span-2">
@@ -345,7 +343,6 @@ const Products = () => {
         </div>
       </div>
 
-      {/* Lista de produtos */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {[...Array(8)].map((_, index) => (
@@ -387,11 +384,13 @@ const Products = () => {
         </>
       )}
 
-      {/* Diálogo para exibir histórico de preços */}
       <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
         <DialogContent className="sm:max-w-[800px]">
           <DialogHeader>
             <DialogTitle>Histórico de Preços</DialogTitle>
+            <DialogDescription>
+              Visualize as mudanças de preço ao longo do tempo
+            </DialogDescription>
           </DialogHeader>
           
           {selectedProduct && (

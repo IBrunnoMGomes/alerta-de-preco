@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,7 +23,8 @@ import {
   Dialog, 
   DialogContent, 
   DialogHeader, 
-  DialogTitle 
+  DialogTitle,
+  DialogDescription
 } from '@/components/ui/dialog';
 import PriceHistoryChart from '@/components/product/PriceHistoryChart';
 import { Product } from '@/types/product';
@@ -51,7 +51,6 @@ const fetchProducts = async () => {
   if (error) throw error;
   
   return data.map((item: any) => {
-    // Converter para o formato esperado pelo componente Product
     const product: Product = {
       id: item.id,
       name: item.name,
@@ -94,7 +93,17 @@ const Dashboard = () => {
 
   const handleAddProduct = async (newProduct: Omit<Product, 'id'>) => {
     try {
-      // Inserir o produto no banco de dados
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast({
+          title: "Erro de autenticação",
+          description: "Você precisa estar logado para adicionar produtos.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('products')
         .insert({
@@ -105,14 +114,14 @@ const Dashboard = () => {
           previous_price: newProduct.previousPrice,
           image_url: newProduct.imageUrl,
           is_on_sale: newProduct.isOnSale,
-          price_target: newProduct.priceTarget
+          price_target: newProduct.priceTarget,
+          user_id: user.id
         })
         .select()
         .single();
       
       if (error) throw error;
       
-      // Adicionar o histórico de preço inicial
       await supabase
         .from('price_history')
         .insert({
@@ -120,7 +129,6 @@ const Dashboard = () => {
           price: newProduct.currentPrice
         });
       
-      // Recarregar a lista de produtos
       refetch();
       
       toast({
@@ -145,7 +153,6 @@ const Dashboard = () => {
       
       if (error) throw error;
       
-      // Recarregar a lista de produtos
       refetch();
       
       toast({
@@ -171,7 +178,6 @@ const Dashboard = () => {
 
   const handleUpdateProduct = async (id: string, updates: Partial<Product>) => {
     try {
-      // Converter do formato do componente para o formato do banco
       const dbUpdates: any = {};
       
       if (updates.currentPrice !== undefined) dbUpdates.current_price = updates.currentPrice;
@@ -186,7 +192,6 @@ const Dashboard = () => {
       
       if (error) throw error;
       
-      // Recarregar a lista de produtos
       refetch();
     } catch (error: any) {
       toast({
@@ -233,7 +238,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Cards de estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardContent className="p-6 flex justify-between items-center">
@@ -284,7 +288,6 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Lista de produtos */}
       <h2 className="text-xl font-semibold mb-4">Produtos Monitorados</h2>
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -326,11 +329,13 @@ const Dashboard = () => {
         </>
       )}
 
-      {/* Diálogo para exibir histórico de preços */}
       <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
         <DialogContent className="sm:max-w-[800px]">
           <DialogHeader>
             <DialogTitle>Histórico de Preços</DialogTitle>
+            <DialogDescription>
+              Visualize as mudanças de preço ao longo do tempo
+            </DialogDescription>
           </DialogHeader>
           
           {selectedProduct && (

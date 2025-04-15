@@ -39,6 +39,19 @@ const PriceAlertForm = ({ product, onClose, onAlertSet }: PriceAlertFormProps) =
     try {
       const numTargetPrice = Number(targetPrice);
       
+      // Obter o ID do usuário atual
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast({
+          title: "Erro de autenticação",
+          description: "Você precisa estar logado para configurar alertas.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+      
       // Atualizar o preço alvo no produto
       const { error: productError } = await supabase
         .from('products')
@@ -76,7 +89,7 @@ const PriceAlertForm = ({ product, onClose, onAlertSet }: PriceAlertFormProps) =
         const { error: insertError } = await supabase
           .from('alerts')
           .insert({
-            user_id: (await supabase.auth.getUser()).data.user?.id,
+            user_id: user.id,
             product_id: product.id,
             target_price: numTargetPrice,
             is_active: true

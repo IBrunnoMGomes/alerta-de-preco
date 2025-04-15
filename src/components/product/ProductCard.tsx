@@ -9,7 +9,14 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, ExternalLink, Trash2, AlertTriangle } from "lucide-react";
+import { MoreVertical, ExternalLink, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatCurrency, calculatePriceChange } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import PriceAlertForm from '@/components/product/PriceAlertForm';
 import { Product } from '@/types/product';
 
@@ -111,7 +118,6 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onDelete, onViewDeta
         </Button>
       </CardFooter>
 
-      {/* Modal de Alerta de Preço */}
       <Dialog open={openAlertModal} onOpenChange={setOpenAlertModal}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>

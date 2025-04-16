@@ -1,1 +1,8 @@
+
 project_id = "kggflbsusrbfqkvlgpxk"
+
+[functions.scrape-product]
+verify_jwt = true
+
+[functions.update-prices]
+verify_jwt = true

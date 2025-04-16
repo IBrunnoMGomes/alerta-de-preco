@@ -19,9 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PlusCircle, Link, Search, AlertCircle } from 'lucide-react';
+import { PlusCircle, Link, Search, AlertCircle, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/components/ui/sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Product } from '@/types/product';
 import { supabase } from '@/integrations/supabase/client';
@@ -88,10 +88,8 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
     const { data: { user } } = await supabase.auth.getUser();
       
     if (!user) {
-      toast({
-        title: "Erro de autenticação",
-        description: "Você precisa estar logado para adicionar produtos.",
-        variant: "destructive",
+      toast.error("Erro de autenticação", {
+        description: "Você precisa estar logado para adicionar produtos."
       });
       return;
     }
@@ -99,52 +97,42 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
     setIsValidating(true);
     setValidationError('');
 
-    // Simulação de busca de produto (em um caso real, seria uma chamada de API)
     try {
-      // Simular tempo de processamento
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Obter token de autenticação para a chamada da função
+      const { data: { session } } = await supabase.auth.getSession();
       
-      // Mock de dados do produto
-      const mockProduct = {
-        name: 'Produto de exemplo via URL',
-        url: url,
-        store: detectStoreFromUrl(url),
-        currentPrice: 799.99,
-        previousPrice: 899.99,
-        priceChange: -11.1, 
-        imageUrl: 'https://via.placeholder.com/300',
-        isOnSale: true,
-        lastUpdated: new Date().toISOString(),
-        priceTarget: null,
-        priceHistory: [
-          { date: new Date(Date.now() - 864000000).toISOString(), price: 899.99 },
-          { date: new Date().toISOString(), price: 799.99 }
-        ]
-      };
+      if (!session) {
+        throw new Error('Sessão expirada. Por favor, faça login novamente.');
+      }
       
-      onAddProduct(mockProduct);
-      toast({
-        title: "Produto adicionado com sucesso",
-        description: "Monitoramento iniciado para " + mockProduct.name,
+      // Chamar a edge function para extrair os dados do produto
+      const { data, error } = await supabase.functions.invoke('scrape-product', {
+        body: { url },
       });
+      
+      if (error) {
+        console.error('Erro ao chamar a função de scraping:', error);
+        throw new Error(`Falha na extração dos dados: ${error.message}`);
+      }
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Não foi possível extrair os dados do produto.');
+      }
+      
+      // Adicionar o produto à lista
+      onAddProduct(data.product);
+      
+      toast.success("Produto adicionado com sucesso", {
+        description: "Monitoramento iniciado para " + data.product.name
+      });
+      
       handleClose();
     } catch (error) {
-      setValidationError('Não foi possível encontrar informações do produto. Verifique se o URL está correto.');
+      console.error('Erro ao processar produto:', error);
+      setValidationError(error.message || 'Não foi possível processar o produto. Verifique se o URL está correto.');
     } finally {
       setIsValidating(false);
     }
-  };
-
-  const detectStoreFromUrl = (url: string): string => {
-    const lowerUrl = url.toLowerCase();
-    
-    for (const store of stores) {
-      if (lowerUrl.includes(store.id)) {
-        return store.name;
-      }
-    }
-    
-    return 'Loja Desconhecida';
   };
 
   const handleAddBySearch = async (e: FormEvent) => {
@@ -164,10 +152,8 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
     const { data: { user } } = await supabase.auth.getUser();
       
     if (!user) {
-      toast({
-        title: "Erro de autenticação",
-        description: "Você precisa estar logado para adicionar produtos.",
-        variant: "destructive",
+      toast.error("Erro de autenticação", {
+        description: "Você precisa estar logado para adicionar produtos."
       });
       return;
     }
@@ -177,38 +163,13 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
 
     // Simulação de busca de produto
     try {
-      // Simular tempo de processamento
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Mock de dados do produto
-      const selectedStoreName = stores.find(s => s.id === selectedStore)?.name || 'Loja Desconhecida';
-      
-      const mockProduct = {
-        name: `${searchTerm} (via busca)`,
-        url: `https://exemplo.com/produto-${Date.now()}`,
-        store: selectedStoreName,
-        currentPrice: 599.99,
-        previousPrice: 649.99,
-        priceChange: -7.7,
-        imageUrl: 'https://via.placeholder.com/300',
-        isOnSale: false,
-        lastUpdated: new Date().toISOString(),
-        priceTarget: null,
-        priceHistory: [
-          { date: new Date(Date.now() - 864000000).toISOString(), price: 649.99 },
-          { date: new Date().toISOString(), price: 599.99 }
-        ]
-      };
-      
-      onAddProduct(mockProduct);
-      toast({
-        title: "Produto adicionado com sucesso",
-        description: "Monitoramento iniciado para " + mockProduct.name,
+      toast.info("Funcionalidade em implementação", {
+        description: "A busca direta ainda não está implementada. Por favor, use a opção de URL por enquanto."
       });
-      handleClose();
+      
+      setIsValidating(false);
     } catch (error) {
       setValidationError('Não foi possível encontrar produtos com este termo. Tente uma busca diferente.');
-    } finally {
       setIsValidating(false);
     }
   };
@@ -283,7 +244,12 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
                   disabled={isValidating} 
                   className="bg-brand-primary hover:bg-brand-dark"
                 >
-                  {isValidating ? 'Validando...' : 'Adicionar'}
+                  {isValidating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Extraindo dados...
+                    </>
+                  ) : 'Adicionar'}
                 </Button>
               </DialogFooter>
             </form>
@@ -336,7 +302,12 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
                   disabled={isValidating} 
                   className="bg-brand-primary hover:bg-brand-dark"
                 >
-                  {isValidating ? 'Buscando...' : 'Buscar e Adicionar'}
+                  {isValidating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Buscando...
+                    </>
+                  ) : 'Buscar e Adicionar'}
                 </Button>
               </DialogFooter>
             </form>

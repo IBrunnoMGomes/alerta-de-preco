@@ -1,9 +1,8 @@
-
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/components/ui/sonner';
 import { Product } from '@/types/product';
 import DashboardHeader from '@/components/dashboard/DashboardHeader';
 import DashboardStats from '@/components/dashboard/DashboardStats';
@@ -38,7 +37,6 @@ const fetchProducts = async () => {
   if (error) throw error;
   
   return data.map((item: any) => {
-    // Calculate price change percentage
     const currentPrice = item.current_price;
     const previousPrice = item.previous_price;
     let priceChange = 0;
@@ -70,7 +68,6 @@ const fetchProducts = async () => {
 const Dashboard = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
-  const { toast } = useToast();
 
   const { data: products = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['products'],
@@ -82,10 +79,8 @@ const Dashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        toast({
-          title: "Erro de autenticação",
-          description: "Você precisa estar logado para adicionar produtos.",
-          variant: "destructive",
+        toast.error("Erro de autenticação", {
+          description: "Você precisa estar logado para adicionar produtos."
         });
         return;
       }
@@ -117,15 +112,12 @@ const Dashboard = () => {
       
       refetch();
       
-      toast({
-        title: "Produto adicionado",
-        description: "O produto foi adicionado à sua lista de monitoramento.",
+      toast.success("Produto adicionado", {
+        description: "O produto foi adicionado à sua lista de monitoramento."
       });
     } catch (error: any) {
-      toast({
-        title: "Erro ao adicionar produto",
-        description: error.message,
-        variant: "destructive",
+      toast.error("Erro ao adicionar produto", {
+        description: error.message
       });
     }
   };
@@ -141,15 +133,12 @@ const Dashboard = () => {
       
       refetch();
       
-      toast({
-        title: "Produto removido",
-        description: "O produto foi removido da sua lista de monitoramento.",
+      toast.success("Produto removido", {
+        description: "O produto foi removido da sua lista de monitoramento."
       });
     } catch (error: any) {
-      toast({
-        title: "Erro ao remover produto",
-        description: error.message,
-        variant: "destructive",
+      toast.error("Erro ao remover produto", {
+        description: error.message
       });
     }
   };
@@ -180,10 +169,8 @@ const Dashboard = () => {
       
       refetch();
     } catch (error: any) {
-      toast({
-        title: "Erro ao atualizar produto",
-        description: error.message,
-        variant: "destructive",
+      toast.error("Erro ao atualizar produto", {
+        description: error.message
       });
     }
   };

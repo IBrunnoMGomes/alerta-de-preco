@@ -6,7 +6,7 @@ import ProductCard from '@/components/product/ProductCard';
 import AddProductForm from '@/components/product/AddProductForm';
 import { Product } from '@/types/product';
 import { calculatePriceChange } from '@/lib/utils';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from '@/components/ui/sonner';
 import { Input } from '@/components/ui/input';
 import { 
   Select,
@@ -76,7 +76,6 @@ const Products = () => {
   const [showOnSaleOnly, setShowOnSaleOnly] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
-  const { toast } = useToast();
 
   const { data: products = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['products'],
@@ -143,10 +142,8 @@ const Products = () => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        toast({
-          title: "Erro de autenticação",
-          description: "Você precisa estar logado para adicionar produtos.",
-          variant: "destructive",
+        toast.error("Erro de autenticação", {
+          description: "Você precisa estar logado para adicionar produtos."
         });
         return;
       }
@@ -178,15 +175,12 @@ const Products = () => {
       
       refetch();
       
-      toast({
-        title: "Produto adicionado",
-        description: "O produto foi adicionado à sua lista de monitoramento.",
+      toast.success("Produto adicionado", {
+        description: "O produto foi adicionado à sua lista de monitoramento."
       });
     } catch (error: any) {
-      toast({
-        title: "Erro ao adicionar produto",
-        description: error.message,
-        variant: "destructive",
+      toast.error("Erro ao adicionar produto", {
+        description: error.message
       });
     }
   };
@@ -202,15 +196,12 @@ const Products = () => {
       
       refetch();
       
-      toast({
-        title: "Produto removido",
-        description: "O produto foi removido da sua lista de monitoramento.",
+      toast.success("Produto removido", {
+        description: "O produto foi removido da sua lista de monitoramento."
       });
     } catch (error: any) {
-      toast({
-        title: "Erro ao remover produto",
-        description: error.message,
-        variant: "destructive",
+      toast.error("Erro ao remover produto", {
+        description: error.message
       });
     }
   };
@@ -241,10 +232,8 @@ const Products = () => {
       
       refetch();
     } catch (error: any) {
-      toast({
-        title: "Erro ao atualizar produto",
-        description: error.message,
-        variant: "destructive",
+      toast.error("Erro ao atualizar produto", {
+        description: error.message
       });
     }
   };

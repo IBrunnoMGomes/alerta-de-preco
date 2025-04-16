@@ -168,37 +168,49 @@ async function scrapeProductData(url: string, apiKey: string) {
   console.log('Starting product scraping with Firecrawl API')
   const firecrawlUrl = 'https://api.firecrawl.co/product-data'
   
-  const response = await fetch(firecrawlUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({ url })
-  })
-  
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error('Firecrawl API error:', errorText)
-    throw new Error(`Firecrawl API Error: ${response.status} ${errorText}`)
+  try {
+    const response = await fetch(firecrawlUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({ url })
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Firecrawl API error:', errorText, 'Status:', response.status)
+      throw new Error(`Firecrawl API Error: ${response.status} ${errorText}`)
+    }
+    
+    const contentType = response.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text()
+      console.error('Unexpected response format:', text)
+      throw new Error('Firecrawl API returned non-JSON response')
+    }
+    
+    const data = await response.json()
+    console.log('Firecrawl API response:', JSON.stringify(data, null, 2))
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to extract product data')
+    }
+    
+    // Map Firecrawl response to our product structure
+    const productData = {
+      name: data.data?.title || 'Unknown Product',
+      currentPrice: parseFloat(data.data?.price?.current || '0'),
+      previousPrice: data.data?.price?.previous ? parseFloat(data.data?.price?.previous) : null,
+      imageUrl: data.data?.images?.[0] || 'https://via.placeholder.com/300',
+      store: data.data?.seller || null
+    }
+    
+    console.log('Extracted product data:', productData)
+    return productData
+  } catch (error) {
+    console.error('Error in scrapeProductData:', error.message)
+    throw error
   }
-  
-  const data = await response.json()
-  console.log('Firecrawl API response:', JSON.stringify(data, null, 2))
-  
-  if (!data.success) {
-    throw new Error(data.error || 'Failed to extract product data')
-  }
-  
-  // Map Firecrawl response to our product structure
-  const productData = {
-    name: data.data?.title || 'Unknown Product',
-    currentPrice: parseFloat(data.data?.price?.current || '0'),
-    previousPrice: data.data?.price?.previous ? parseFloat(data.data?.price?.previous) : null,
-    imageUrl: data.data?.images?.[0] || 'https://via.placeholder.com/300',
-    store: data.data?.seller || null
-  }
-  
-  console.log('Extracted product data:', productData)
-  return productData
 }

@@ -115,8 +115,8 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
         throw new Error(`Falha na extração dos dados: ${error.message}`);
       }
       
-      if (!data.success) {
-        throw new Error(data.error || 'Não foi possível extrair os dados do produto.');
+      if (!data || !data.success) {
+        throw new Error((data && data.error) || 'Não foi possível extrair os dados do produto.');
       }
       
       // Adicionar o produto à lista
@@ -129,7 +129,7 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
       handleClose();
     } catch (error) {
       console.error('Erro ao processar produto:', error);
-      setValidationError(error.message || 'Não foi possível processar o produto. Verifique se o URL está correto.');
+      setValidationError(error instanceof Error ? error.message : 'Não foi possível processar o produto. Verifique se o URL está correto.');
     } finally {
       setIsValidating(false);
     }

@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,7 +13,6 @@ import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
-import React from 'react';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -59,13 +59,13 @@ const App = () => {
   }
 
   return (
-    <React.StrictMode>
-      <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
+    <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
               <Route
                 path="/auth"
                 element={session ? <Navigate to="/" /> : <Auth />}
@@ -88,10 +88,10 @@ const App = () => {
               />
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </TooltipProvider>
-        </QueryClientProvider>
-      </ThemeProvider>
-    </React.StrictMode>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 };
 

@@ -37,22 +37,34 @@ const fetchProducts = async () => {
   
   if (error) throw error;
   
-  return data.map((item: any) => ({
-    id: item.id,
-    name: item.name,
-    url: item.url,
-    store: item.store,
-    currentPrice: item.current_price,
-    previousPrice: item.previous_price,
-    imageUrl: item.image_url || 'https://via.placeholder.com/300',
-    isOnSale: item.is_on_sale || false,
-    lastUpdated: item.last_checked,
-    priceTarget: item.price_target,
-    priceHistory: item.price_history.map((history: any) => ({
-      date: history.checked_at,
-      price: history.price
-    }))
-  }));
+  return data.map((item: any) => {
+    // Calculate price change percentage
+    const currentPrice = item.current_price;
+    const previousPrice = item.previous_price;
+    let priceChange = 0;
+    
+    if (previousPrice && currentPrice !== previousPrice) {
+      priceChange = parseFloat((((currentPrice - previousPrice) / previousPrice) * 100).toFixed(2));
+    }
+    
+    return {
+      id: item.id,
+      name: item.name,
+      url: item.url,
+      store: item.store,
+      currentPrice: item.current_price,
+      previousPrice: item.previous_price,
+      priceChange: priceChange,
+      imageUrl: item.image_url || 'https://via.placeholder.com/300',
+      isOnSale: item.is_on_sale || false,
+      lastUpdated: item.last_checked,
+      priceTarget: item.price_target,
+      priceHistory: item.price_history.map((history: any) => ({
+        date: history.checked_at,
+        price: history.price
+      }))
+    };
+  });
 };
 
 const Dashboard = () => {

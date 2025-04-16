@@ -4,6 +4,7 @@ import { LogOut } from "lucide-react";
 import AddProductForm from "@/components/product/AddProductForm";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Product } from "@/types/product";
 
 interface DashboardHeaderProps {
   onAddProduct: (product: Omit<Product, 'id'>) => Promise<void>;

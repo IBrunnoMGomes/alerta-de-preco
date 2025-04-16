@@ -12,7 +12,9 @@ import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
+import React from 'react';
 
+// Create a client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -57,37 +59,39 @@ const App = () => {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route
-              path="/auth"
-              element={session ? <Navigate to="/" /> : <Auth />}
-            />
-            <Route
-              path="/"
-              element={session ? <Dashboard /> : <Navigate to="/auth" />}
-            />
-            <Route
-              path="/products"
-              element={session ? <Products /> : <Navigate to="/auth" />}
-            />
-            <Route
-              path="/notifications"
-              element={session ? <Notifications /> : <Navigate to="/auth" />}
-            />
-            <Route
-              path="/settings"
-              element={session ? <Settings /> : <Navigate to="/auth" />}
-            />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route
+                path="/auth"
+                element={session ? <Navigate to="/" /> : <Auth />}
+              />
+              <Route
+                path="/"
+                element={session ? <Dashboard /> : <Navigate to="/auth" />}
+              />
+              <Route
+                path="/products"
+                element={session ? <Products /> : <Navigate to="/auth" />}
+              />
+              <Route
+                path="/notifications"
+                element={session ? <Notifications /> : <Navigate to="/auth" />}
+              />
+              <Route
+                path="/settings"
+                element={session ? <Settings /> : <Navigate to="/auth" />}
+              />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </React.StrictMode>
   );
 };
 

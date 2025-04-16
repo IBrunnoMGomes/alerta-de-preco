@@ -98,13 +98,6 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
     setValidationError('');
 
     try {
-      // Obter token de autenticação para a chamada da função
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        throw new Error('Sessão expirada. Por favor, faça login novamente.');
-      }
-      
       console.log('Enviando requisição para scrape-product com URL:', url);
       
       // Chamar a edge function para extrair os dados do produto
@@ -121,6 +114,10 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
       
       if (!data || !data.success) {
         throw new Error((data && data.error) || 'Não foi possível extrair os dados do produto.');
+      }
+      
+      if (!data.product || !data.product.name || data.product.currentPrice === undefined) {
+        throw new Error('Dados do produto incompletos ou inválidos.');
       }
       
       // Adicionar o produto à lista

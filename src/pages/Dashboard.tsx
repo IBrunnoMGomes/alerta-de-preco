@@ -37,14 +37,16 @@ const fetchProducts = async () => {
   
   if (error) throw error;
   
-  // Filtrar para não mostrar produtos indefinidos/vazios
+  // Garantir que somente produtos válidos sejam exibidos
   return data
     .filter(item => 
       item && 
       item.name && 
       item.url && 
       item.current_price !== undefined && 
-      item.current_price !== null
+      item.current_price !== null &&
+      typeof item.current_price === 'number' &&
+      item.current_price > 0 // Garantir que não sejam mostrados produtos com preço zero
     )
     .map((item: any) => {
       const currentPrice = item.current_price;
@@ -91,6 +93,14 @@ const Dashboard = () => {
       if (!user) {
         toast.error("Erro de autenticação", {
           description: "Você precisa estar logado para adicionar produtos."
+        });
+        return;
+      }
+      
+      // Validação dos dados do produto
+      if (!newProduct.name || !newProduct.url || newProduct.currentPrice === undefined || newProduct.currentPrice <= 0) {
+        toast.error("Dados inválidos", {
+          description: "Os dados do produto estão incompletos ou inválidos."
         });
         return;
       }

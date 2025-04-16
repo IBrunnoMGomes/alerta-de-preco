@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -51,7 +52,9 @@ const fetchProducts = async () => {
       item.name && 
       item.url && 
       item.current_price !== undefined && 
-      item.current_price !== null
+      item.current_price !== null &&
+      typeof item.current_price === 'number' &&
+      item.current_price > 0 // Garantir que não sejam mostrados produtos com preço zero
     )
     .map((item: any) => {
       const product: Product = {
@@ -156,6 +159,14 @@ const Products = () => {
         return;
       }
       
+      // Validação dos dados do produto
+      if (!newProduct.name || !newProduct.url || newProduct.currentPrice === undefined || newProduct.currentPrice <= 0) {
+        toast.error("Dados inválidos", {
+          description: "Os dados do produto estão incompletos ou inválidos."
+        });
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('products')
         .insert({
@@ -167,7 +178,8 @@ const Products = () => {
           image_url: newProduct.imageUrl,
           is_on_sale: newProduct.isOnSale,
           price_target: newProduct.priceTarget,
-          user_id: user.id
+          user_id: user.id,
+          last_checked: new Date().toISOString()
         })
         .select()
         .single();
@@ -178,7 +190,8 @@ const Products = () => {
         .from('price_history')
         .insert({
           product_id: data.id,
-          price: newProduct.currentPrice
+          price: newProduct.currentPrice,
+          checked_at: new Date().toISOString()
         });
       
       refetch();

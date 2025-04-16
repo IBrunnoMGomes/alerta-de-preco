@@ -105,6 +105,8 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
         throw new Error('Sessão expirada. Por favor, faça login novamente.');
       }
       
+      console.log('Enviando requisição para scrape-product com URL:', url);
+      
       // Chamar a edge function para extrair os dados do produto
       const { data, error } = await supabase.functions.invoke('scrape-product', {
         body: { url },
@@ -114,6 +116,8 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
         console.error('Erro ao chamar a função de scraping:', error);
         throw new Error(`Falha na extração dos dados: ${error.message}`);
       }
+      
+      console.log('Resposta da função de scraping:', data);
       
       if (!data || !data.success) {
         throw new Error((data && data.error) || 'Não foi possível extrair os dados do produto.');
@@ -130,6 +134,11 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
     } catch (error) {
       console.error('Erro ao processar produto:', error);
       setValidationError(error instanceof Error ? error.message : 'Não foi possível processar o produto. Verifique se o URL está correto.');
+      
+      // Exibir toast com erro para melhor visibilidade
+      toast.error("Erro ao adicionar produto", {
+        description: error instanceof Error ? error.message : 'Falha ao processar o produto.'
+      });
     } finally {
       setIsValidating(false);
     }

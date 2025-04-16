@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,33 +37,42 @@ const fetchProducts = async () => {
   
   if (error) throw error;
   
-  return data.map((item: any) => {
-    const currentPrice = item.current_price;
-    const previousPrice = item.previous_price;
-    let priceChange = 0;
-    
-    if (previousPrice && currentPrice !== previousPrice) {
-      priceChange = parseFloat((((currentPrice - previousPrice) / previousPrice) * 100).toFixed(2));
-    }
-    
-    return {
-      id: item.id,
-      name: item.name,
-      url: item.url,
-      store: item.store,
-      currentPrice: item.current_price,
-      previousPrice: item.previous_price,
-      priceChange: priceChange,
-      imageUrl: item.image_url || 'https://via.placeholder.com/300',
-      isOnSale: item.is_on_sale || false,
-      lastUpdated: item.last_checked,
-      priceTarget: item.price_target,
-      priceHistory: item.price_history.map((history: any) => ({
-        date: history.checked_at,
-        price: history.price
-      }))
-    };
-  });
+  // Filtrar para não mostrar produtos indefinidos/vazios
+  return data
+    .filter(item => 
+      item && 
+      item.name && 
+      item.url && 
+      item.current_price !== undefined && 
+      item.current_price !== null
+    )
+    .map((item: any) => {
+      const currentPrice = item.current_price;
+      const previousPrice = item.previous_price;
+      let priceChange = 0;
+      
+      if (previousPrice && currentPrice !== previousPrice) {
+        priceChange = parseFloat((((currentPrice - previousPrice) / previousPrice) * 100).toFixed(2));
+      }
+      
+      return {
+        id: item.id,
+        name: item.name,
+        url: item.url,
+        store: item.store,
+        currentPrice: item.current_price,
+        previousPrice: item.previous_price,
+        priceChange: priceChange,
+        imageUrl: item.image_url || 'https://via.placeholder.com/300',
+        isOnSale: item.is_on_sale || false,
+        lastUpdated: item.last_checked,
+        priceTarget: item.price_target,
+        priceHistory: (item.price_history || []).map((history: any) => ({
+          date: history.checked_at,
+          price: history.price
+        }))
+      };
+    });
 };
 
 const Dashboard = () => {
@@ -96,7 +106,8 @@ const Dashboard = () => {
           image_url: newProduct.imageUrl,
           is_on_sale: newProduct.isOnSale,
           price_target: newProduct.priceTarget,
-          user_id: user.id
+          user_id: user.id,
+          last_checked: new Date().toISOString()
         })
         .select()
         .single();
@@ -107,7 +118,8 @@ const Dashboard = () => {
         .from('price_history')
         .insert({
           product_id: data.id,
-          price: newProduct.currentPrice
+          price: newProduct.currentPrice,
+          checked_at: new Date().toISOString()
         });
       
       refetch();

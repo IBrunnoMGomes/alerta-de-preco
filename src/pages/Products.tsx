@@ -45,27 +45,35 @@ const fetchProducts = async () => {
   
   if (error) throw error;
   
-  return data.map((item: any) => {
-    const product: Product = {
-      id: item.id,
-      name: item.name,
-      url: item.url,
-      store: item.store,
-      currentPrice: item.current_price,
-      previousPrice: item.previous_price,
-      imageUrl: item.image_url || 'https://via.placeholder.com/300',
-      isOnSale: item.is_on_sale || false,
-      lastUpdated: item.last_checked,
-      priceTarget: item.price_target,
-      priceChange: calculatePriceChange(item.current_price, item.previous_price),
-      priceHistory: item.price_history.map((history: any) => ({
-        date: history.checked_at,
-        price: history.price
-      }))
-    };
-    
-    return product;
-  });
+  return data
+    .filter(item => 
+      item && 
+      item.name && 
+      item.url && 
+      item.current_price !== undefined && 
+      item.current_price !== null
+    )
+    .map((item: any) => {
+      const product: Product = {
+        id: item.id,
+        name: item.name,
+        url: item.url,
+        store: item.store,
+        currentPrice: item.current_price,
+        previousPrice: item.previous_price,
+        imageUrl: item.image_url || 'https://via.placeholder.com/300',
+        isOnSale: item.is_on_sale || false,
+        lastUpdated: item.last_checked,
+        priceTarget: item.price_target,
+        priceChange: calculatePriceChange(item.current_price, item.previous_price),
+        priceHistory: (item.price_history || []).map((history: any) => ({
+          date: history.checked_at,
+          price: history.price
+        }))
+      };
+      
+      return product;
+    });
 };
 
 const Products = () => {

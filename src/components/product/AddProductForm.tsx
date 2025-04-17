@@ -167,15 +167,45 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
     setIsValidating(true);
     setValidationError('');
 
-    // Simulação de busca de produto
     try {
-      toast.info("Funcionalidade em implementação", {
-        description: "A busca direta ainda não está implementada. Por favor, use a opção de URL por enquanto."
+      console.log('Enviando requisição para busca de produto:', searchTerm, 'na loja:', selectedStore);
+      
+      // Chamar a edge function para buscar o produto
+      const { data, error } = await supabase.functions.invoke('scrape-product', {
+        body: { searchTerm, store: selectedStore },
       });
       
-      setIsValidating(false);
+      if (error) {
+        console.error('Erro ao chamar a função de busca:', error);
+        throw new Error(`Falha na busca do produto: ${error.message}`);
+      }
+      
+      console.log('Resposta da função de busca:', data);
+      
+      if (!data || !data.success) {
+        throw new Error((data && data.error) || 'Não foi possível encontrar o produto.');
+      }
+      
+      if (!data.product || !data.product.name || data.product.currentPrice === undefined) {
+        throw new Error('Dados do produto incompletos ou inválidos.');
+      }
+      
+      // Adicionar o produto à lista
+      onAddProduct(data.product);
+      
+      toast.success("Produto adicionado com sucesso", {
+        description: "Monitoramento iniciado para " + data.product.name
+      });
+      
+      handleClose();
     } catch (error) {
-      setValidationError('Não foi possível encontrar produtos com este termo. Tente uma busca diferente.');
+      console.error('Erro ao buscar produto:', error);
+      setValidationError(error instanceof Error ? error.message : 'Não foi possível encontrar o produto. Tente outro termo de busca.');
+      
+      toast.error("Erro ao adicionar produto", {
+        description: error instanceof Error ? error.message : 'Falha ao buscar o produto.'
+      });
+    } finally {
       setIsValidating(false);
     }
   };

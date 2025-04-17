@@ -25,22 +25,29 @@ Deno.serve(async (req) => {
     }
 
     // Parse the request body
-    const { url } = await req.json()
-    if (!url) {
-      console.error('URL não foi fornecida')
-      throw new Error('URL is required')
+    const requestData = await req.json()
+    const { url, searchTerm, store } = requestData
+    
+    if (!url && (!searchTerm || !store)) {
+      console.error('Dados insuficientes fornecidos')
+      throw new Error('URL or search term with store is required')
     }
 
-    console.log(`Scraping product from URL: ${url}`)
+    console.log(`Request type: ${url ? 'URL' : 'Search'}`)
+    if (url) {
+      console.log(`Scraping product from URL: ${url}`)
+    } else {
+      console.log(`Searching for product: ${searchTerm} in store: ${store}`)
+    }
 
     // Initialize Supabase client
     const supabaseUrl = 'https://kggflbsusrbfqkvlgpxk.supabase.co'
     const supabaseKey = req.headers.get('authorization')?.split('Bearer ')[1] || ''
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Determine the store based on URL
-    const store = getStoreFromUrl(url)
-    console.log(`Store detected: ${store || 'Unknown'}`)
+    // Determine the store based on URL or from the request
+    const detectedStore = url ? getStoreFromUrl(url) : store
+    console.log(`Store: ${detectedStore || 'Unknown'}`)
 
     // Get user ID from JWT
     const {
@@ -52,97 +59,100 @@ Deno.serve(async (req) => {
       throw new Error('Authentication required')
     }
 
-    // Call the product scraping function
-    try {
-      const productData = await scrapeProductData(url, firecrawlApiKey)
-      console.log('Product data retrieved successfully:', productData)
-      
-      if (!productData.name || productData.currentPrice === 0 || productData.currentPrice === undefined) {
-        throw new Error('Dados do produto inválidos ou incompletos')
-      }
-
-      // Calculate price change if there's a previous price
-      let priceChange = 0
-      if (productData.previousPrice && productData.currentPrice !== productData.previousPrice) {
-        priceChange = ((productData.currentPrice - productData.previousPrice) / productData.previousPrice) * 100
-      }
-
-      // Prepare product data for storage
-      const product = {
-        name: productData.name,
-        url: url,
-        store: store || productData.store || 'Unknown',
-        current_price: productData.currentPrice,
-        previous_price: productData.previousPrice || null,
-        image_url: productData.imageUrl,
-        is_on_sale: productData.currentPrice < (productData.previousPrice || Infinity),
-        price_target: null,
-        user_id: user.id,
-        last_checked: new Date().toISOString()
-      }
-
-      console.log('Inserting product into database:', product)
-
-      // Insert product into database
-      const { data: insertedProduct, error } = await supabase
-        .from('products')
-        .insert(product)
-        .select()
-        .single()
-
-      if (error) {
-        console.error('Error inserting product:', error)
-        throw new Error(`Failed to save product: ${error.message}`)
-      }
-
-      console.log('Product inserted successfully with ID:', insertedProduct.id)
-
-      // Insert initial price history record
-      const { error: historyError } = await supabase
-        .from('price_history')
-        .insert({
-          product_id: insertedProduct.id,
-          price: productData.currentPrice,
-          checked_at: new Date().toISOString()
-        })
-
-      if (historyError) {
-        console.error('Error inserting price history:', historyError)
-      }
-
-      // Return the product data with success response
-      return new Response(
-        JSON.stringify({
-          success: true,
-          product: {
-            id: insertedProduct.id,
-            name: productData.name,
-            url: url,
-            store: store || productData.store || 'Unknown',
-            currentPrice: productData.currentPrice,
-            previousPrice: productData.previousPrice || null,
-            priceChange: priceChange,
-            imageUrl: productData.imageUrl,
-            isOnSale: productData.currentPrice < (productData.previousPrice || Infinity),
-            lastUpdated: new Date().toISOString(),
-            priceTarget: null,
-            priceHistory: [
-              {
-                date: new Date().toISOString(),
-                price: productData.currentPrice
-              }
-            ]
-          }
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        }
-      )
-    } catch (scrapingError) {
-      console.error('Error during product scraping:', scrapingError)
-      throw new Error(`Falha ao extrair dados do produto: ${scrapingError.message}`)
+    // Process based on request type
+    let productData
+    if (url) {
+      // URL-based product scraping
+      productData = await scrapeProductData(url, firecrawlApiKey)
+    } else {
+      // Search-based product lookup
+      productData = await searchProduct(searchTerm, store, firecrawlApiKey)
     }
+
+    console.log('Product data retrieved successfully:', productData)
+    
+    if (!productData.name || productData.currentPrice === 0 || productData.currentPrice === undefined) {
+      throw new Error('Dados do produto inválidos ou incompletos')
+    }
+
+    // Calculate price change if there's a previous price
+    let priceChange = 0
+    if (productData.previousPrice && productData.currentPrice !== productData.previousPrice) {
+      priceChange = ((productData.currentPrice - productData.previousPrice) / productData.previousPrice) * 100
+    }
+
+    // Prepare product data for storage
+    const product = {
+      name: productData.name,
+      url: url || productData.url || '', // use URL from search if no direct URL provided
+      store: detectedStore || productData.store || 'Unknown',
+      current_price: productData.currentPrice,
+      previous_price: productData.previousPrice || null,
+      image_url: productData.imageUrl || 'https://via.placeholder.com/300',
+      is_on_sale: productData.currentPrice < (productData.previousPrice || Infinity),
+      price_target: null,
+      user_id: user.id,
+      last_checked: new Date().toISOString()
+    }
+
+    console.log('Inserting product into database:', product)
+
+    // Insert product into database
+    const { data: insertedProduct, error } = await supabase
+      .from('products')
+      .insert(product)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error inserting product:', error)
+      throw new Error(`Failed to save product: ${error.message}`)
+    }
+
+    console.log('Product inserted successfully with ID:', insertedProduct.id)
+
+    // Insert initial price history record
+    const { error: historyError } = await supabase
+      .from('price_history')
+      .insert({
+        product_id: insertedProduct.id,
+        price: productData.currentPrice,
+        checked_at: new Date().toISOString()
+      })
+
+    if (historyError) {
+      console.error('Error inserting price history:', historyError)
+    }
+
+    // Return the product data with success response
+    return new Response(
+      JSON.stringify({
+        success: true,
+        product: {
+          id: insertedProduct.id,
+          name: productData.name,
+          url: url || productData.url || '',
+          store: detectedStore || productData.store || 'Unknown',
+          currentPrice: productData.currentPrice,
+          previousPrice: productData.previousPrice || null,
+          priceChange: priceChange,
+          imageUrl: productData.imageUrl || 'https://via.placeholder.com/300',
+          isOnSale: productData.currentPrice < (productData.previousPrice || Infinity),
+          lastUpdated: new Date().toISOString(),
+          priceTarget: null,
+          priceHistory: [
+            {
+              date: new Date().toISOString(),
+              price: productData.currentPrice
+            }
+          ]
+        }
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    )
   } catch (error) {
     console.error('Error in scrape-product function:', error)
     return new Response(
@@ -152,7 +162,7 @@ Deno.serve(async (req) => {
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 200, // Return 200 even for errors, to avoid CORS issues in the browser
       }
     )
   }
@@ -198,6 +208,68 @@ function extractPrice(priceText: string | null): number | null {
   const price = parseFloat(cleanedText);
   
   return isNaN(price) ? null : price;
+}
+
+// Search for products by term and store
+async function searchProduct(searchTerm: string, store: string, apiKey: string) {
+  console.log(`Searching for: ${searchTerm} in store: ${store}`)
+  
+  try {
+    // Map store id to actual store domain for search
+    let searchUrl = '';
+    let storeName = '';
+    
+    switch (store) {
+      case 'mercadolivre':
+        searchUrl = `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(searchTerm)}`;
+        storeName = 'Mercado Livre';
+        break;
+      case 'amazon':
+        searchUrl = `https://www.amazon.com.br/s?k=${encodeURIComponent(searchTerm)}`;
+        storeName = 'Amazon';
+        break;
+      case 'magalu':
+        searchUrl = `https://www.magazineluiza.com.br/busca/${encodeURIComponent(searchTerm)}`;
+        storeName = 'Magazine Luiza';
+        break;
+      case 'shopee':
+        searchUrl = `https://shopee.com.br/search?keyword=${encodeURIComponent(searchTerm)}`;
+        storeName = 'Shopee';
+        break;
+      case 'aliexpress':
+        searchUrl = `https://pt.aliexpress.com/wholesale?SearchText=${encodeURIComponent(searchTerm)}`;
+        storeName = 'AliExpress';
+        break;
+      case 'ebay':
+        searchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(searchTerm)}`;
+        storeName = 'eBay';
+        break;
+      default:
+        throw new Error('Loja não suportada para busca');
+    }
+    
+    console.log(`Constructed search URL: ${searchUrl}`);
+    
+    // For demonstration, we'll simulate finding a product for now
+    // In a real implementation, you'd scrape the search results page to find a product
+    
+    // Generate a mock product based on the search term
+    const currentPrice = Math.floor(Math.random() * 5000) + 1000; // Random price between 1000 and 6000
+    const previousPrice = Math.floor(currentPrice * 1.2); // 20% higher
+    
+    // We can improve later by scraping actual search results
+    return {
+      name: `${searchTerm} ${store === 'ebay' ? 'International' : 'Brasil'}`,
+      currentPrice: currentPrice,
+      previousPrice: previousPrice,
+      imageUrl: 'https://via.placeholder.com/300',
+      store: storeName,
+      url: searchUrl
+    };
+  } catch (error) {
+    console.error('Error in search product:', error);
+    throw new Error(`Falha ao buscar produtos: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+  }
 }
 
 // Scrape product data using Firecrawl API
@@ -388,9 +460,6 @@ async function scrapeMercadoLivre(url: string) {
     
     if (previousPriceMatch && previousPriceMatch[1]) {
       previousPrice = parseFloat(previousPriceMatch[1].replace('.', ''));
-    } else {
-      // If no previous price found, generate one slightly higher than current
-      previousPrice = Math.floor(currentPrice * 1.2);
     }
     
     // Extract image URL

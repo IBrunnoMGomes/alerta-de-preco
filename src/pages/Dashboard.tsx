@@ -35,7 +35,10 @@ const fetchProducts = async () => {
       price_history(id, price, checked_at)
     `);
   
-  if (error) throw error;
+  if (error) {
+    console.error('Error fetching products:', error);
+    throw error;
+  }
   
   // Garantir que somente produtos válidos sejam exibidos
   return data
@@ -122,7 +125,10 @@ const Dashboard = () => {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error inserting product:', error);
+        throw error;
+      }
       
       await supabase
         .from('price_history')
@@ -138,6 +144,7 @@ const Dashboard = () => {
         description: "O produto foi adicionado à sua lista de monitoramento."
       });
     } catch (error: any) {
+      console.error('Error adding product:', error);
       toast.error("Erro ao adicionar produto", {
         description: error.message
       });

@@ -70,9 +70,7 @@ const MainLayout = ({ children }: MainLayoutProps) => {
             <Button variant="outline" size="icon" className="rounded-full">
               <Search className="h-4 w-4" />
             </Button>
-            <Button className="bg-brand-primary hover:bg-brand-dark">
-              + Adicionar Produto
-            </Button>
+            {/* Removed "Adicionar Produto" button */}
           </div>
         </div>
       </header>

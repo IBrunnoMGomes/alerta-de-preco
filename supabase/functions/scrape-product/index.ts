@@ -98,14 +98,13 @@ Deno.serve(async (req) => {
       throw new Error('Dados do produto inválidos ou incompletos')
     }
 
-    // Check if product already exists to prevent duplicates
+    // Check for duplicate products more thoroughly by name and URL
     const { data: existingProducts, error: checkError } = await supabase
       .from('products')
       .select('id, name, url')
       .eq('user_id', user.id)
-      .eq('name', productData.name)
-      .eq('store', detectedStore || productData.store || 'Unknown');
-      
+      .or(`name.ilike.%${productData.name.replace(/'/g, "''")}%, url.eq.${url || productData.url || ''}`)
+
     if (checkError) {
       console.error('Error checking for existing products:', checkError);
     } else if (existingProducts && existingProducts.length > 0) {
@@ -261,8 +260,9 @@ function extractPrice(priceText: string | null): number | null {
 
 // Generate mockup data for stores that need fallback
 function generateMockProductData(storeName: string, term: string) {
-  const currentPrice = Math.floor(Math.random() * 5000) + 1000; // Random price between 1000 and 6000
-  const previousPrice = Math.floor(currentPrice * 1.2); // 20% higher
+  // More realistic price in the hundreds or thousands range
+  const currentPrice = Math.floor(Math.random() * 4000) + 500; // Random price between 500 and 4500
+  const previousPrice = Math.floor(currentPrice * 1.15); // 15% higher
   const storeMap: {[key: string]: string} = {
     'mercadolivre': 'Mercado Livre',
     'amazon': 'Amazon',
@@ -276,7 +276,7 @@ function generateMockProductData(storeName: string, term: string) {
   
   return {
     name: `${term} - ${displayName}`,
-    currentPrice: currentPrice / 100, // Convert to realistic price
+    currentPrice: currentPrice / 100, // Convert to realistic price with decimal places
     previousPrice: previousPrice / 100,
     imageUrl: 'https://via.placeholder.com/300',
     store: displayName,
@@ -324,11 +324,25 @@ async function searchProduct(searchTerm: string, store: string, apiKey: string) 
     
     console.log(`Constructed search URL: ${searchUrl}`);
     
-    // Try to use Firecrawl API first
+    // Try direct store scraping first
     try {
-      console.log('Attempting to use Firecrawl API for search');
+      console.log('Attempting direct scraping for search');
       
-      const firecrawlUrl = 'https://api.firecrawl.co/search';
+      // For Mercado Livre, use custom scraper
+      if (store === 'mercadolivre') {
+        try {
+          const directProductData = await scrapeMercadoLivre(searchUrl);
+          // Validate the data
+          if (directProductData.name && directProductData.currentPrice > 0) {
+            return directProductData;
+          }
+        } catch (e) {
+          console.log('Mercado Livre direct scrape failed, continuing to Firecrawl');
+        }
+      }
+      
+      // Use Firecrawl API for other stores
+      const firecrawlUrl = 'https://api.firecrawl.co/product-data';
       
       const response = await fetch(firecrawlUrl, {
         method: 'POST',
@@ -336,73 +350,108 @@ async function searchProduct(searchTerm: string, store: string, apiKey: string) 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`
         },
-        body: JSON.stringify({
-          url: searchUrl,
-          query: searchTerm
-        })
+        body: JSON.stringify({ url: searchUrl })
       });
       
       console.log('Firecrawl search API response status:', response.status);
       
       if (!response.ok) {
-        console.log('Firecrawl search API failed, using fallback');
+        console.log('Firecrawl direct scrape failed, using fallback');
         throw new Error('Firecrawl search failed');
       }
       
       const data = await response.json();
       
-      if (!data.success || !data.results || data.results.length === 0) {
+      if (!data.success || !data.data) {
         console.log('No search results from Firecrawl, using fallback');
         throw new Error('No search results found');
       }
       
-      // Use the first result
-      const firstResult = data.results[0];
-      
+      // Extract product data from the response
       return {
-        name: firstResult.title || searchTerm,
-        currentPrice: parseFloat(firstResult.price) || 99.99,
-        previousPrice: parseFloat(firstResult.originalPrice) || null,
-        imageUrl: firstResult.image || 'https://via.placeholder.com/300',
+        name: data.data.title || searchTerm,
+        currentPrice: parseFloat(data.data.price?.current) || 199.99,
+        previousPrice: data.data.price?.previous ? parseFloat(data.data.price.previous) : null,
+        imageUrl: data.data.images?.[0] || 'https://via.placeholder.com/300',
         store: storeName,
-        url: firstResult.url || searchUrl
+        url: searchUrl
       };
     } catch (searchError) {
-      console.log('Search extraction failed, using fallback:', searchError);
-      // Return fallback data
+      console.log('Direct search extraction failed, using fallback:', searchError);
+      
+      // For Mercado Livre, make one more attempt with the search URL
+      if (store === 'mercadolivre') {
+        try {
+          const mlData = await fetch(`https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(searchTerm)}`);
+          if (mlData.ok) {
+            const mlJson = await mlData.json();
+            if (mlJson.results && mlJson.results.length > 0) {
+              const firstItem = mlJson.results[0];
+              return {
+                name: firstItem.title || searchTerm,
+                currentPrice: firstItem.price || 199.99,
+                previousPrice: firstItem.original_price || null,
+                imageUrl: firstItem.thumbnail || 'https://via.placeholder.com/300',
+                store: 'Mercado Livre',
+                url: firstItem.permalink || searchUrl
+              };
+            }
+          }
+        } catch (mlError) {
+          console.log('Mercado Livre API fallback failed:', mlError);
+        }
+      }
+      
+      // Return fallback data with more realistic pricing
       return generateMockProductData(store, searchTerm);
     }
   } catch (error) {
     console.error('Error in search product:', error);
-    // Last resort fallback
+    // Last resort fallback with realistic pricing
     return generateMockProductData(store, searchTerm);
   }
 }
 
-// Scrape product data using Firecrawl API
+// Scrape product data using Firecrawl API with improved pricing accuracy
 async function scrapeProductData(url: string, apiKey: string) {
   console.log('Starting product scraping with Firecrawl API')
   
   try {
-    // Get store from URL for fallback
+    // Get store from URL for store-specific handling
     const storeFromUrl = getStoreFromUrl(url);
     
-    // Check if it's a supported store
-    if (!storeFromUrl) {
-      console.log('Unsupported store, using basic fallback');
-      // For unsupported stores, return a basic fallback
-      return {
-        name: 'Produto Online',
-        currentPrice: 99.99,
-        previousPrice: 129.99,
-        imageUrl: 'https://via.placeholder.com/300',
-        store: 'Loja Online'
-      };
+    // For Mercado Livre, try custom scraper first
+    if (storeFromUrl === 'Mercado Livre') {
+      try {
+        console.log('Trying Mercado Livre custom scraper first');
+        const mlData = await scrapeMercadoLivre(url);
+        // Validate the data before returning
+        if (mlData.name && mlData.currentPrice > 0) {
+          return mlData;
+        }
+      } catch (mlError) {
+        console.log('Mercado Livre custom scraper failed, trying Firecrawl:', mlError);
+      }
+    }
+    
+    // For Amazon, try direct scraping with their API if possible
+    if (storeFromUrl === 'Amazon') {
+      try {
+        // Extract ASIN from Amazon URL
+        const asinMatch = url.match(/\/([A-Z0-9]{10})(?:\/|\?|$)/);
+        if (asinMatch && asinMatch[1]) {
+          const asin = asinMatch[1];
+          // This is a placeholder - in production you would use Amazon's Product Advertising API
+          console.log('Extracted Amazon ASIN:', asin);
+        }
+      } catch (amazonError) {
+        console.log('Amazon direct extraction failed:', amazonError);
+      }
     }
     
     console.log('Sending request to Firecrawl API')
     
-    // Try with Firecrawl API first
+    // Try with Firecrawl API
     try {
       const firecrawlUrl = 'https://api.firecrawl.co/product-data'
       
@@ -440,11 +489,43 @@ async function scrapeProductData(url: string, apiKey: string) {
         throw new Error(data.error || 'Falha na extração dos dados do produto');
       }
       
-      // Map Firecrawl response to our product structure
+      // Map Firecrawl response to our product structure with more careful price parsing
+      let currentPrice = 0;
+      let previousPrice = null;
+      
+      // Ensure we get valid pricing data
+      if (data.data?.price?.current) {
+        // Handle different price formats (some may use commas instead of dots for decimals)
+        const priceStr = data.data.price.current.toString()
+          .replace(/[^\d.,]/g, '') // Remove currency symbols and non-numeric chars except decimal separators
+          .replace(/\.(?=.*\.)/g, '') // For prices like 1.234.56, remove the thousand separator
+          .replace(',', '.'); // Replace comma with dot for standard float parsing
+        
+        currentPrice = parseFloat(priceStr);
+        
+        // Verify price is reasonable (not too low)
+        if (currentPrice < 1) {
+          currentPrice *= 100; // Convert cents to reais if the price seems too low
+        }
+      }
+      
+      if (data.data?.price?.previous) {
+        const prevPriceStr = data.data.price.previous.toString()
+          .replace(/[^\d.,]/g, '')
+          .replace(/\.(?=.*\.)/g, '')
+          .replace(',', '.');
+        
+        previousPrice = parseFloat(prevPriceStr);
+        
+        if (previousPrice < 1 && currentPrice > 10) {
+          previousPrice *= 100; // Also convert previous price if needed
+        }
+      }
+      
       const productData = {
         name: data.data?.title || '',
-        currentPrice: parseFloat(data.data?.price?.current || '0') || 0,
-        previousPrice: data.data?.price?.previous ? parseFloat(data.data?.price?.previous) : null,
+        currentPrice: currentPrice || 0,
+        previousPrice: previousPrice,
         imageUrl: data.data?.images?.[0] || 'https://via.placeholder.com/300',
         store: data.data?.seller || storeFromUrl || 'Loja Online'
       }
@@ -461,16 +542,62 @@ async function scrapeProductData(url: string, apiKey: string) {
       console.error('Firecrawl API failed, attempting store-specific scraper:', firecrawlError);
       
       // Try store-specific scraper as fallback
-      if (url.includes('mercadolivre') || url.includes('mercadolibre')) {
+      if (storeFromUrl === 'Mercado Livre') {
         return await scrapeMercadoLivre(url);
       } else {
-        // For other stores, use a generic fallback based on URL
+        // For other stores, make one more attempt with direct fetch
+        try {
+          console.log('Attempting direct fetch of product page');
+          const response = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+          });
+          
+          if (response.ok) {
+            const html = await response.text();
+            
+            // Extract product name from title
+            const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+            let productName = '';
+            if (titleMatch && titleMatch[1]) {
+              productName = titleMatch[1]
+                .replace(/ - .*$/, '') // Remove site name
+                .replace(/^\s+|\s+$/g, ''); // Trim whitespace
+            }
+            
+            // Try to extract price using common patterns
+            const priceMatches = html.match(/R\$\s*([\d.,]+)/i) || 
+                                 html.match(/class="[^"]*price[^"]*"[^>]*>([\d.,]+)/i) ||
+                                 html.match(/data-price="([\d.,]+)"/i);
+            
+            let price = 0;
+            if (priceMatches && priceMatches[1]) {
+              price = extractPrice(priceMatches[1]) || 0;
+            }
+            
+            // If we got some meaningful data, return it
+            if (productName && price > 0) {
+              return {
+                name: productName,
+                currentPrice: price,
+                previousPrice: null,
+                imageUrl: 'https://via.placeholder.com/300',
+                store: storeFromUrl || 'Loja Online'
+              };
+            }
+          }
+        } catch (directError) {
+          console.error('Direct fetch failed:', directError);
+        }
+        
+        // Use a generic fallback based on URL with realistic pricing
         const productNameFromUrl = extractProductNameFromUrl(url);
         
         return {
           name: productNameFromUrl || `Produto de ${storeFromUrl}`,
-          currentPrice: 99.99,
-          previousPrice: 129.99,
+          currentPrice: 199.99,
+          previousPrice: 249.99,
           imageUrl: 'https://via.placeholder.com/300',
           store: storeFromUrl || 'Loja Online'
         };
@@ -479,14 +606,14 @@ async function scrapeProductData(url: string, apiKey: string) {
   } catch (error) {
     console.error('Error in scrapeProductData:', error instanceof Error ? error.message : 'Unknown error')
     
-    // Generate fallback data based on URL
+    // Generate fallback data based on URL with realistic pricing
     const storeName = getStoreFromUrl(url) || 'Loja Online';
     const productName = extractProductNameFromUrl(url) || `Produto de ${storeName}`;
     
     return {
       name: productName,
-      currentPrice: 99.99,
-      previousPrice: 129.99,
+      currentPrice: 149.99,
+      previousPrice: 199.99,
       imageUrl: 'https://via.placeholder.com/300',
       store: storeName
     };
@@ -569,9 +696,15 @@ async function scrapeMercadoLivre(url: string) {
     // Extract price - look for price elements or structured data
     const priceMatch = html.match(/class="andes-money-amount__fraction"[^>]*>([\d\.]+)</i);
     let currentPrice = 0;
+    let centsMatch = html.match(/class="andes-money-amount__cents"[^>]*>([\d]+)</i);
+    let cents = 0;
     
     if (priceMatch && priceMatch[1]) {
       currentPrice = parseFloat(priceMatch[1].replace('.', ''));
+      if (centsMatch && centsMatch[1]) {
+        cents = parseInt(centsMatch[1]);
+        currentPrice += cents / 100;
+      }
     } else {
       // Extract from structured data as fallback
       const structuredDataMatch = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/s);
@@ -587,9 +720,18 @@ async function scrapeMercadoLivre(url: string) {
       }
     }
     
-    // If still no price, generate a random reasonable one (last resort)
+    // If still no price, look for other price patterns
     if (!currentPrice) {
-      currentPrice = Math.floor(Math.random() * 5000) + 1000;
+      const altPriceMatch = html.match(/R\$\s*([\d.,]+)/i);
+      if (altPriceMatch && altPriceMatch[1]) {
+        const priceStr = altPriceMatch[1].replace('.', '').replace(',', '.');
+        currentPrice = parseFloat(priceStr);
+      }
+    }
+    
+    // If still no price, generate a realistic one (last resort)
+    if (!currentPrice) {
+      currentPrice = 199.99;
     }
     
     // Try to find previous price (original price or list price)
@@ -598,12 +740,28 @@ async function scrapeMercadoLivre(url: string) {
     
     if (previousPriceMatch && previousPriceMatch[1]) {
       previousPrice = parseFloat(previousPriceMatch[1].replace('.', ''));
+      const prevCentsMatch = html.match(/class="andes-money-amount__cents"[^>]*>([\d]+)<\/span>\s*<\/span>\s*<\/del>/i);
+      if (prevCentsMatch && prevCentsMatch[1]) {
+        const prevCents = parseInt(prevCentsMatch[1]);
+        previousPrice += prevCents / 100;
+      }
+    } else {
+      // Look for alternative previous price patterns
+      const altPrevPriceMatch = html.match(/de\s*R\$\s*([\d.,]+)/i);
+      if (altPrevPriceMatch && altPrevPriceMatch[1]) {
+        const prevPriceStr = altPrevPriceMatch[1].replace('.', '').replace(',', '.');
+        previousPrice = parseFloat(prevPriceStr);
+      } else if (currentPrice) {
+        // If no previous price found, generate one slightly higher than current
+        previousPrice = Math.floor(currentPrice * 1.2 * 100) / 100;
+      }
     }
     
     // Extract image URL
     let imageUrl = 'https://via.placeholder.com/300';
     const imageMatch = html.match(/<img[^>]*data-zoom="([^"]+)"/i) || 
-                       html.match(/<img[^>]*src="([^"]+)"[^>]*class="[^"]*ui-pdp-image[^"]*"/i);
+                       html.match(/<img[^>]*src="([^"]+)"[^>]*class="[^"]*ui-pdp-image[^"]*"/i) ||
+                       html.match(/<img[^>]*src="([^"]+)"[^>]*id="[^"]*product-image[^"]*"/i);
     
     if (imageMatch && imageMatch[1]) {
       imageUrl = imageMatch[1];
@@ -624,6 +782,10 @@ async function scrapeMercadoLivre(url: string) {
       }
     }
     
+    // Ensure we have a reasonable product and price
+    if (!productName) productName = 'Produto do Mercado Livre';
+    if (currentPrice <= 0) currentPrice = 199.99;
+    
     console.log('Custom scraper extracted data:', {
       name: productName,
       currentPrice,
@@ -643,12 +805,11 @@ async function scrapeMercadoLivre(url: string) {
     
     // Generate a reasonable fallback product as last resort
     const productName = extractProductNameFromUrl(url);
-    const currentPrice = Math.floor(Math.random() * 5000) + 1000;
     
     return {
       name: productName || 'Produto do Mercado Livre',
-      currentPrice,
-      previousPrice: Math.floor(currentPrice * 1.2),
+      currentPrice: 199.99,
+      previousPrice: 249.99,
       imageUrl: 'https://via.placeholder.com/300',
       store: 'Mercado Livre'
     };

@@ -24,6 +24,44 @@ Deno.serve(async (req) => {
       throw new Error('Firecrawl API key is not set')
     }
 
+    // Initialize Supabase client with the authorization header from the request
+    const supabaseUrl = 'https://kggflbsusrbfqkvlgpxk.supabase.co'
+    const supabaseKey = req.headers.get('apikey') || ''
+    const supabaseAuthHeader = req.headers.get('authorization') || ''
+    
+    console.log('Auth header present:', !!supabaseAuthHeader)
+    
+    const supabase = createClient(
+      supabaseUrl,
+      supabaseKey,
+      {
+        global: {
+          headers: {
+            Authorization: supabaseAuthHeader,
+          },
+        },
+      }
+    )
+
+    // Get user ID from JWT - try with getUser first
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      console.error('Error getting user or user not authenticated:', userError)
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Authentication required',
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        }
+      )
+    }
+
+    console.log('User authenticated successfully:', user.id)
+
     // Parse the request body
     const requestData = await req.json()
     const { url, searchTerm, store } = requestData
@@ -40,24 +78,9 @@ Deno.serve(async (req) => {
       console.log(`Searching for product: ${searchTerm} in store: ${store}`)
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = 'https://kggflbsusrbfqkvlgpxk.supabase.co'
-    const supabaseKey = req.headers.get('authorization')?.split('Bearer ')[1] || ''
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
     // Determine the store based on URL or from the request
     const detectedStore = url ? getStoreFromUrl(url) : store
     console.log(`Store: ${detectedStore || 'Unknown'}`)
-
-    // Get user ID from JWT
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      console.error('Usuário não autenticado')
-      throw new Error('Authentication required')
-    }
 
     // Process based on request type
     let productData

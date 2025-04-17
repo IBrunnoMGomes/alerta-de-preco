@@ -84,21 +84,18 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
       return;
     }
 
-    // Verificar autenticação
-    const { data: { user } } = await supabase.auth.getUser();
-      
-    if (!user) {
-      toast.error("Erro de autenticação", {
-        description: "Você precisa estar logado para adicionar produtos."
-      });
-      return;
-    }
-
     setIsValidating(true);
     setValidationError('');
 
     try {
       console.log('Enviando requisição para scrape-product com URL:', url);
+      
+      // Obtenha o token da sessão atual
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('Você precisa estar logado para adicionar produtos.');
+      }
       
       // Chamar a edge function para extrair os dados do produto
       const { data, error } = await supabase.functions.invoke('scrape-product', {
@@ -154,21 +151,18 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
       return;
     }
 
-    // Verificar autenticação
-    const { data: { user } } = await supabase.auth.getUser();
-      
-    if (!user) {
-      toast.error("Erro de autenticação", {
-        description: "Você precisa estar logado para adicionar produtos."
-      });
-      return;
-    }
-
     setIsValidating(true);
     setValidationError('');
 
     try {
       console.log('Enviando requisição para busca de produto:', searchTerm, 'na loja:', selectedStore);
+      
+      // Verificar se há uma sessão válida
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('Você precisa estar logado para adicionar produtos.');
+      }
       
       // Chamar a edge function para buscar o produto
       const { data, error } = await supabase.functions.invoke('scrape-product', {

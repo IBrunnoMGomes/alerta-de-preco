@@ -1,5 +1,7 @@
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import MainLayout from '@/components/layout/MainLayout';
 import { 
   Card, 
@@ -24,9 +26,11 @@ import {
   TrendingDown, 
   Clock,
   ExternalLink,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+import { Product } from '@/types/product';
 
 interface Notification {
   id: string;
@@ -43,79 +47,76 @@ interface Notification {
   isRead: boolean;
 }
 
-// Dados simulados para notificações
-const MOCK_NOTIFICATIONS: Notification[] = [
-  {
-    id: '1',
-    productId: '1',
-    productName: 'Samsung Galaxy S23 Ultra 256GB',
-    productUrl: 'https://exemplo.com/produto-1',
-    store: 'Mercado Livre',
-    type: 'price_drop',
-    message: 'O preço caiu para o menor valor dos últimos 30 dias!',
-    currentPrice: 5999.99,
-    previousPrice: 6499.99,
-    priceChange: -7.7,
-    date: new Date().toISOString(),
-    isRead: false
-  },
-  {
-    id: '2',
-    productId: '4',
-    productName: 'Smart TV LG OLED 55" 4K UHD',
-    productUrl: 'https://exemplo.com/produto-4',
-    store: 'Shopee',
-    type: 'price_drop',
-    message: 'Grande queda de preço detectada!',
-    currentPrice: 4559.10,
-    previousPrice: 5199.00,
-    priceChange: -12.3,
-    date: new Date(Date.now() - 1 * 864000000).toISOString(),
-    isRead: true
-  },
-  {
-    id: '3',
-    productId: '2',
-    productName: 'PlayStation 5 Slim Digital Edition',
-    productUrl: 'https://exemplo.com/produto-2',
-    store: 'Amazon',
-    type: 'price_goal',
-    message: 'O preço atingiu seu valor alvo de R$ 3.800,00!',
-    currentPrice: 3799.90,
-    previousPrice: 3999.90,
-    priceChange: -5.0,
-    date: new Date(Date.now() - 2 * 864000000).toISOString(),
-    isRead: true
-  },
-  {
-    id: '4',
-    productId: '5',
-    productName: 'Headphone Sony WH-1000XM5',
-    productUrl: 'https://exemplo.com/produto-5',
-    store: 'Amazon',
-    type: 'available',
-    message: 'O produto está disponível novamente!',
-    currentPrice: 2399.00,
-    previousPrice: 2699.00,
-    priceChange: -11.1,
-    date: new Date(Date.now() - 3 * 864000000).toISOString(),
-    isRead: false
-  },
-  {
-    id: '5',
-    productId: '0',
-    productName: '',
-    productUrl: '',
-    store: '',
-    type: 'system',
-    message: 'Bem-vindo ao PriceWatch! Configure suas preferências de notificação nas configurações.',
-    currentPrice: 0,
-    previousPrice: 0,
-    priceChange: 0,
-    date: new Date(Date.now() - 5 * 864000000).toISOString(),
-    isRead: true
+// Função para gerar notificações baseadas em produtos reais
+const generateNotificationsFromProducts = (products: Product[]): Notification[] => {
+  if (!products || products.length === 0) {
+    return [];
   }
-];
+  
+  const notifications: Notification[] = [];
+  
+  // Adicionar notificação de sistema se for o primeiro produto
+  if (products.length === 1) {
+    notifications.push({
+      id: 'system-1',
+      productId: '0',
+      productName: '',
+      productUrl: '',
+      store: '',
+      type: 'system',
+      message: 'Bem-vindo ao PriceWatch! Seu primeiro produto foi adicionado com sucesso.',
+      currentPrice: 0,
+      previousPrice: 0,
+      priceChange: 0,
+      date: new Date().toISOString(),
+      isRead: false
+    });
+  }
+  
+  // Converter produtos em notificações
+  products.forEach((product, index) => {
+    // Apenas produtos com mudança de preço
+    if (product.previousPrice && product.currentPrice !== product.previousPrice) {
+      // Notificação de queda de preço
+      if (product.currentPrice < product.previousPrice) {
+        notifications.push({
+          id: `price-drop-${product.id}`,
+          productId: product.id,
+          productName: product.name,
+          productUrl: product.url,
+          store: product.store,
+          type: 'price_drop',
+          message: 'O preço caiu para o menor valor desde que você começou a monitorar!',
+          currentPrice: product.currentPrice,
+          previousPrice: product.previousPrice,
+          priceChange: product.priceChange,
+          date: product.lastUpdated,
+          isRead: false
+        });
+      }
+      
+      // Notificação de meta atingida se tiver priceTarget
+      if (product.priceTarget && product.currentPrice <= product.priceTarget) {
+        notifications.push({
+          id: `price-goal-${product.id}`,
+          productId: product.id,
+          productName: product.name,
+          productUrl: product.url,
+          store: product.store,
+          type: 'price_goal',
+          message: `O preço atingiu seu valor alvo de ${formatCurrency(product.priceTarget)}!`,
+          currentPrice: product.currentPrice,
+          previousPrice: product.previousPrice,
+          priceChange: product.priceChange,
+          date: product.lastUpdated,
+          isRead: false
+        });
+      }
+    }
+  });
+  
+  return notifications;
+};
 
 const Notifications = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -130,16 +131,76 @@ const Notifications = () => {
     email: 'usuario@exemplo.com'
   });
 
-  useEffect(() => {
-    // Simulação de carregamento de dados
-    const loadData = async () => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setNotifications(MOCK_NOTIFICATIONS);
-      setIsLoading(false);
-    };
+  // Buscar produtos reais
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery({
+    queryKey: ['products'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select(`
+          id, 
+          name, 
+          url, 
+          store, 
+          current_price, 
+          previous_price, 
+          image_url, 
+          is_on_sale, 
+          price_target, 
+          last_checked,
+          price_history(id, price, checked_at)
+        `);
+      
+      if (error) throw error;
+      
+      return data
+        .filter(item => 
+          item && 
+          item.name && 
+          item.url && 
+          item.current_price !== undefined && 
+          item.current_price !== null &&
+          typeof item.current_price === 'number' &&
+          item.current_price > 0
+        )
+        .map((item: any) => {
+          const currentPrice = item.current_price;
+          const previousPrice = item.previous_price;
+          let priceChange = 0;
+          
+          if (previousPrice && currentPrice !== previousPrice) {
+            priceChange = parseFloat((((currentPrice - previousPrice) / previousPrice) * 100).toFixed(2));
+          }
+          
+          return {
+            id: item.id,
+            name: item.name,
+            url: item.url,
+            store: item.store,
+            currentPrice: item.current_price,
+            previousPrice: item.previous_price,
+            priceChange: priceChange,
+            imageUrl: item.image_url || 'https://via.placeholder.com/300',
+            isOnSale: item.is_on_sale || false,
+            lastUpdated: item.last_checked,
+            priceTarget: item.price_target,
+            priceHistory: (item.price_history || []).map((history: any) => ({
+              date: history.checked_at,
+              price: history.price
+            }))
+          };
+        });
+    }
+  });
 
-    loadData();
-  }, []);
+  useEffect(() => {
+    // Gerar notificações baseadas em produtos reais
+    if (!isLoadingProducts) {
+      const generatedNotifications = generateNotificationsFromProducts(products);
+      setNotifications(generatedNotifications);
+      setIsLoading(false);
+    }
+  }, [products, isLoadingProducts]);
 
   const getUnreadCount = () => {
     return notifications.filter(n => !n.isRead).length;
@@ -242,7 +303,7 @@ const Notifications = () => {
         </TabsList>
         
         <TabsContent value="notifications">
-          {isLoading ? (
+          {isLoading || isLoadingProducts ? (
             <div className="space-y-4">
               {[...Array(4)].map((_, index) => (
                 <div key={index} className="h-32 rounded-lg bg-gray-100 animate-pulse" />
@@ -272,7 +333,7 @@ const Notifications = () => {
                 </div>
               </div>
 
-              {notifications.length === 0 ? (
+              {notifications.length === 0 && products.length === 0 ? (
                 <Card className="text-center p-6">
                   <CardContent className="pt-6 flex flex-col items-center">
                     <div className="h-20 w-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
@@ -280,7 +341,19 @@ const Notifications = () => {
                     </div>
                     <h3 className="text-lg font-medium mb-2">Nenhuma notificação</h3>
                     <p className="text-gray-500">
-                      Você não tem notificações no momento. Quando houver mudanças de preço ou promoções, elas aparecerão aqui.
+                      Adicione produtos para monitorar e receber notificações de mudanças de preço.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : notifications.length === 0 && products.length > 0 ? (
+                <Card className="text-center p-6">
+                  <CardContent className="pt-6 flex flex-col items-center">
+                    <div className="h-20 w-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                      <Bell className="h-10 w-10 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-medium mb-2">Nenhuma notificação ainda</h3>
+                    <p className="text-gray-500">
+                      Você já está monitorando produtos! Quando houver mudanças de preço, você receberá notificações aqui.
                     </p>
                   </CardContent>
                 </Card>
@@ -347,7 +420,7 @@ const Notifications = () => {
                               </div>
                               
                               <div className="flex space-x-2">
-                                {notification.type !== 'system' && (
+                                {notification.type !== 'system' && notification.productUrl && (
                                   <Button 
                                     size="sm" 
                                     variant="outline" 

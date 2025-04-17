@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PlusCircle, Link, Search, AlertCircle, Loader2 } from 'lucide-react';
+import { PlusCircle, Link, Search, AlertCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -110,6 +110,15 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
       console.log('Resposta da função de scraping:', data);
       
       if (!data || !data.success) {
+        // Check if product already exists
+        if (data && data.error && data.error.includes('já está sendo monitorado')) {
+          toast.info("Produto já existente", {
+            description: "Este produto já está sendo monitorado"
+          });
+          handleClose();
+          return;
+        }
+        
         throw new Error((data && data.error) || 'Não foi possível extrair os dados do produto.');
       }
       
@@ -177,6 +186,15 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
       console.log('Resposta da função de busca:', data);
       
       if (!data || !data.success) {
+        // Check if product already exists
+        if (data && data.error && data.error.includes('já está sendo monitorado')) {
+          toast.info("Produto já existente", {
+            description: "Este produto já está sendo monitorado"
+          });
+          handleClose();
+          return;
+        }
+        
         throw new Error((data && data.error) || 'Não foi possível encontrar o produto.');
       }
       
@@ -259,8 +277,8 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
               </div>
               
               {validationError && (
-                <div className="flex items-center text-destructive text-sm mt-2">
-                  <AlertCircle className="h-4 w-4 mr-1" />
+                <div className="flex items-center text-destructive text-sm mt-2 p-3 bg-destructive/10 rounded-md">
+                  <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
                   {validationError}
                 </div>
               )}
@@ -317,8 +335,8 @@ const AddProductForm = ({ onAddProduct }: AddProductFormProps) => {
               </div>
               
               {validationError && (
-                <div className="flex items-center text-destructive text-sm mt-2">
-                  <AlertCircle className="h-4 w-4 mr-1" />
+                <div className="flex items-center text-destructive text-sm mt-2 p-3 bg-destructive/10 rounded-md">
+                  <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
                   {validationError}
                 </div>
               )}
